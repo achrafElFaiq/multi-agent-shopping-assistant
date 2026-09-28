@@ -1,329 +1,80 @@
-# Projet : Autonomous Commerce Operating System (ACOS)
+# AI Shopping Assistant
 
-## Problème réel
+## The idea
 
-Les entreprises e-commerce perdent des millions à cause de :
+You tell the assistant what you want:
 
-- ruptures de stock
-- sur-stockage
-- mauvais prix
-- campagnes marketing inefficaces
-- service client lent
-- mauvaise anticipation de la demande
+> "Buy me running shoes under €120, delivered by Friday."
 
-Aujourd'hui chaque problème est traité par un logiciel différent.
+It knows your tastes, searches several stores, picks the best option, asks for your OK, and pays.
 
-L'idée est de construire un système multi-agents qui agit comme un directeur commercial IA autonome.
+## How it's built
 
-## Vision
-
-Un directeur e-commerce ouvre son dashboard et demande :
-
-> Pourquoi les ventes du produit X ont chuté cette semaine ?
-
-L'écosystème d'agents :
-
-- analyse les ventes
-- analyse les stocks
-- analyse les prix concurrents
-- analyse les campagnes marketing
-- analyse les avis clients
-- produit un diagnostic
-- propose un plan d'action
-- peut exécuter automatiquement certaines actions
-
-## Architecture globale
+One **LangGraph agent**. The four chapters below are all parts of this agent.
+The agent calls a few **external services** that sit outside it: the memory database, the stores, and the payment services.
 
 ```
-                     CEO Agent
-                          |
- -------------------------------------------------
- |            |             |            |         |
-Sales      Pricing      Supply      Marketing   CX Agent
-Agent      Agent        Agent       Agent       Customer
-                                                     Agent
- -------------------------------------------------
-                          |
-                    Decision Agent
-                          |
-                 Execution Agent
+User ──► Personal Memory ──► Product Search ──► Decision & Human Approval ──► Payment
+              │                    │                       │                     │
+         Memory DB           Store agents                 You             Payment services
 ```
 
-## Les agents
+## Chapter 1 — Personal Memory
 
-### 1. Sales Intelligence Agent
+The assistant remembers everything you bought and returned, and learns your preferences from it: sizes, colours, brands, price range, and what didn't work.
 
-Analyse :
+- Loads your preferences at the start of each request
+- Updates them after each purchase or return
+- Can explain why it thinks you like something
 
-- ventes
-- marges
-- taux conversion
-- abandon panier
+**Tech:** PostgreSQL, Qdrant, LangGraph memory
 
-Détecte :
+## Chapter 2 — Product Search
 
-- anomalies
-- baisse de performance
-- produits à risque
+The assistant searches several stores at the same time and compares the results.
 
-ML utilisé :
+- Asks each store for matching products, prices, stock, and delivery dates
+- Reads customer reviews to find each product's real pros and cons
+- Checks each store's return and warranty rules
+- Ranks the options and explains its choice
 
-- XGBoost
-- Prophet
-- LSTM
+**Tech:** A2A, MCP, hybrid RAG (reviews and store policies)
 
-### 2. Demand Forecast Agent
+## Chapter 3 — Decision & Human Approval
 
-Prévoit :
+The assistant proposes a purchase and waits for your OK.
 
-- ventes futures
-- stock nécessaire
+- Double-checks its recommendation before showing it
+- Shows you the product, the store, the price, and why
+- Does nothing until you approve, change, or cancel
 
-ML :
+**Tech:** LangGraph `interrupt()`
 
-- LightGBM
-- Temporal Fusion Transformer
-- Prophet
+## Chapter 4 — Payment
 
-Sortie :
+The assistant pays, only within limits you set.
 
-```json
-{
-  "product": "Nike Air Max",
-  "forecast_next_30_days": 1200
-}
-```
+- You set a spending limit in advance
+- It can never go over it
+- It completes the checkout with the store
 
-### 3. Pricing Agent
+**Tech:** AP2 (spending limits), ACP (checkout), Stripe test mode
 
-Mission : optimiser les prix.
+## External services
 
-Sources :
+- **Memory database:** stores your purchase history and preferences
+- **Test stores:** Shopify development stores and a few simulated stores we build ourselves
+- **Payment services:** Stripe test mode, so no real money is involved
 
-- prix concurrents
-- stock
-- élasticité demande
+## Build order
 
-ML :
+1. **Basic version:** a very simple version of all 4 chapters, working end to end
+2. **Product Search:** in depth
+3. **Decision & Human Approval:** in depth
+4. **Payment:** in depth
 
-- Reinforcement Learning
-- Multi-Armed Bandit
+**Personal Memory** is built in parallel by the second person and plugged in when ready.
 
-Le système peut proposer :
+## Stack
 
-```
-Prix actuel : 89€
-Prix recommandé : 94€
-Gain estimé : +12%
-```
-
-### 4. Competitor Intelligence Agent
-
-Scraping :
-
-- Amazon
-- Cdiscount
-- Fnac
-- Shopify stores
-
-Extraction :
-
-- prix
-- promotions
-- avis
-
-RAG : stockage dans Vector DB
-
-### 5. Marketing Agent
-
-Analyse :
-
-- Google Ads
-- Meta Ads
-- campagnes email
-
-Répond :
-
-> Pourquoi la campagne Black Friday n'a pas fonctionné ?
-
-Utilise :
-
-- SQL Agent
-- BI Agent
-
-### 6. Customer Experience Agent
-
-Sources :
-
-- emails
-- tickets
-- chat support
-- avis clients
-
-ML :
-
-- sentiment analysis
-- topic modeling
-
-Détecte :
-
-> 38% des plaintes concernent les délais de livraison.
-
-### 7. Supply Chain Agent
-
-Analyse :
-
-- fournisseurs
-- délais
-- stocks
-
-Prédit : ruptures
-
-Optimise : réapprovisionnement
-
-### 8. Executive Agent
-
-Le cerveau.
-
-Utilise : LangGraph
-
-Coordonne :
-
-- Sales Agent
-- Pricing Agent
-- Marketing Agent
-- Supply Agent
-
-et produit :
-
-- Root Cause Analysis
-- Action Plan
-
-## Partie Agentic AI avancée
-
-### Multi-Agent Collaboration
-
-Exemple :
-
-```
-CEO Agent
-    ↓
-Sales Agent
-    ↓
-Demand Forecast Agent
-    ↓
-Pricing Agent
-    ↓
-Marketing Agent
-```
-
-Chaque agent communique.
-
-### Memory Layer
-
-- Court terme : Redis
-- Long terme : Qdrant
-- Mémoire des décisions passées.
-
-### MCP
-
-Serveurs MCP :
-
-- PostgreSQL MCP → Accès aux ventes.
-- CRM MCP → Accès clients.
-- Shopify MCP → Accès catalogue.
-- Google Analytics MCP → Accès trafic.
-- ERP MCP → Accès stock.
-
-## Partie RAG
-
-Pas un simple RAG. **Hybrid RAG** :
-
-- BM25
-- Embeddings
-- Re-ranking
-- GraphRAG
-
-Graphe :
-
-```
-Client
- ↓
-Commande
- ↓
-Produit
- ↓
-Fournisseur
-```
-
-Permet :
-
-> Quels fournisseurs impactent le plus les produits les plus rentables ?
-
-## Partie Machine Learning
-
-- Forecasting : Prophet, TFT
-- Churn Prediction : XGBoost
-- Customer Lifetime Value : CatBoost
-- Dynamic Pricing : Reinforcement Learning
-- Product Recommendation : Two Tower Model
-- Market Basket Analysis : Apriori
-
-### MLOps
-
-Pipeline :
-
-```
-Airflow
- ↓
-Training
- ↓
-MLflow
- ↓
-Model Registry
- ↓
-Deployment
-```
-
-### Observabilité IA
-
-- LangSmith → Traçage agents.
-- LangFuse → Monitoring LLM.
-- Evidently AI → Drift ML.
-
-## Stack technique
-
-- Backend : Python, FastAPI
-- Agentic : LangGraph, CrewAI, AutoGen
-- LLM : GPT-5, Claude, Llama 3
-- Vector DB : Qdrant
-- Base : PostgreSQL
-- Graph DB : Neo4j
-- Streaming : Kafka
-- MLOps : MLflow, Airflow
-- Infra : Docker, Kubernetes, Terraform
-- Frontend : Next.js
-
-## Pourquoi ce projet est très fort pour un portfolio
-
-Il couvre simultanément :
-
-✅ Agentic AI
-✅ Multi-Agent Systems
-✅ MCP
-✅ Tool Calling
-✅ RAG avancé
-✅ GraphRAG
-✅ Machine Learning classique
-✅ Forecasting
-✅ Recommendation Systems
-✅ Reinforcement Learning
-✅ MLOps
-✅ LLMOps
-✅ Vector Databases
-✅ Graph Databases
-✅ FastAPI
-✅ Cloud Architecture
-✅ Commerce / Retail réel
-
-C'est le type de projet qui peut être présenté comme un "AI Commerce Operating System", proche de ce que développent aujourd'hui des équipes chez Amazon, Shopify, Walmart, Carrefour, Zalando ou des startups spécialisées en Agentic Commerce.
+Python, FastAPI, LangGraph, PostgreSQL, Qdrant, Next.js, Docker
