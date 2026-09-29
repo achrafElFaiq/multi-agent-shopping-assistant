@@ -1,0 +1,61 @@
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from langgraph.types import Command
+
+from backend.agents.shopping.graph import build_graph
+from backend.agents.shopping.schemas import ShoppingRequest
+
+if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
+
+
+def make_request(spending_limit: str = "200") -> ShoppingRequest:
+    return ShoppingRequest(user_id="user-1", query="running shoes", spending_limit=Decimal(spending_limit))
+
+
+def test_graph_compiles() -> None:
+    graph = build_graph()
+
+    nodes = graph.get_graph().nodes
+    for name in ["memory", "search", "approval", "payment"]:
+        assert name in nodes
+
+
+def test_graph_pauses_at_approval() -> None:
+    graph = build_graph()
+    config: RunnableConfig = {"configurable": {"thread_id": "pause"}}
+
+    graph.invoke({"request": make_request()}, config)
+
+    assert graph.get_state(config).next == ("approval",)
+
+
+def test_approve_pays() -> None:
+    graph = build_graph()
+    config: RunnableConfig = {"configurable": {"thread_id": "approve"}}
+
+    graph.invoke({"request": make_request()}, config)
+    result = graph.invoke(Command(resume={"action": "approve"}), config)
+
+    assert result["payment"].status == "paid"
+
+
+def test_cancel_does_not_pay() -> None:
+    graph = build_graph()
+    config: RunnableConfig = {"configurable": {"thread_id": "cancel"}}
+
+    graph.invoke({"request": make_request()}, config)
+    result = graph.invoke(Command(resume={"action": "cancel"}), config)
+
+    assert result["payment"].status == "cancelled"
+
+
+def test_over_limit_is_blocked() -> None:
+    graph = build_graph()
+    config: RunnableConfig = {"configurable": {"thread_id": "limit"}}
+
+    graph.invoke({"request": make_request(spending_limit="50")}, config)
+    result = graph.invoke(Command(resume={"action": "approve"}), config)
+
+    assert result["payment"].status == "blocked"
