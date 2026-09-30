@@ -1,6 +1,6 @@
 """The shopping agent: the four chapters wired together.
 
-memory -> search -> approval (pauses for the user) -> payment
+user_preferences -> product_search -> approval (pauses for the user) -> payment
 """
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -9,9 +9,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from backend.agents.shopping.nodes.approval import ask_approval
-from backend.agents.shopping.nodes.memory import load_preferences
 from backend.agents.shopping.nodes.payment import pay
-from backend.agents.shopping.nodes.search import search_products
+from backend.agents.shopping.nodes.product_search import search_products
+from backend.agents.shopping.nodes.user_preferences import build_user_preferences
 from backend.agents.shopping.schemas import (
     ApprovalDecision,
     PaymentResult,
@@ -38,14 +38,14 @@ type ShoppingGraph = CompiledStateGraph[ShoppingState, None, ShoppingState, Shop
 def build_graph() -> ShoppingGraph:
     graph = StateGraph(ShoppingState)
 
-    graph.add_node("memory", load_preferences)
-    graph.add_node("search", search_products)
+    graph.add_node("user_preferences", build_user_preferences)
+    graph.add_node("product_search", search_products)
     graph.add_node("approval", ask_approval)
     graph.add_node("payment", pay)
 
-    graph.add_edge(START, "memory")
-    graph.add_edge("memory", "search")
-    graph.add_edge("search", "approval")
+    graph.add_edge(START, "user_preferences")
+    graph.add_edge("user_preferences", "product_search")
+    graph.add_edge("product_search", "approval")
     graph.add_edge("approval", "payment")
     graph.add_edge("payment", END)
 

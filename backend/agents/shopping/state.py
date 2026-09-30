@@ -16,7 +16,7 @@ from backend.agents.shopping.schemas import (
 
 class ShoppingState(TypedDict):
     request: ShoppingRequest
-    preferences: NotRequired[UserPreferences]  # set by memory
-    recommendation: NotRequired[Recommendation]  # set by search
+    preferences: NotRequired[UserPreferences]  # set by user_preferences
+    recommendation: NotRequired[Recommendation]  # set by product_search
     decision: NotRequired[ApprovalDecision]  # set by approval
     payment: NotRequired[PaymentResult]  # set by payment

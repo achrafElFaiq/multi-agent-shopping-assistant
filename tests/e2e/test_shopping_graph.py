@@ -18,7 +18,7 @@ def test_graph_compiles() -> None:
     graph = build_graph()
 
     nodes = graph.get_graph().nodes
-    for name in ["memory", "search", "approval", "payment"]:
+    for name in ["user_preferences", "product_search", "approval", "payment"]:
         assert name in nodes
 
 
