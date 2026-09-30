@@ -1,7 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "acos"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.0",
+    "pydantic>=2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
 
 [tool.ruff]
 target-version = "py312"
@@ -13,3 +24,12 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
