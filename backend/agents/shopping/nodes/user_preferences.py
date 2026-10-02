@@ -9,7 +9,7 @@ from backend.agents.shopping.schemas import UserPreferences
 from backend.agents.shopping.state import ShoppingState
 
 
-def load_preferences(state: ShoppingState) -> dict[str, UserPreferences]:
+def build_user_preferences(state: ShoppingState) -> dict[str, UserPreferences]:
     user_id = state["request"].user_id
     preferences = UserPreferences(
         user_id=user_id,
