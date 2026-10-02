@@ -49,7 +49,10 @@ Requirements: [uv](https://docs.astral.sh/uv/) (`brew install uv`). uv installs 
 git clone git@github.com:achrafElFaiq/multi-agent-shopping-assistant.git
 cd multi-agent-shopping-assistant
 uv sync                 # create .venv and install exact versions from uv.lock
+cp .env.example .env    # then add your OpenRouter key to .env (never commit it)
 ```
+
+The tests don't need a key: they use a fake model.
 
 Run the checks — the same ones CI runs:
 
