@@ -22,6 +22,6 @@ def search_products(state: ShoppingState) -> dict[str, Recommendation]:
     )
     recommendation = Recommendation(
         offer=offer,
-        reason=f"Matches your favourite brands ({', '.join(preferences.brands)}) and is in stock.",
+        reason=f"Matches what you like ({', '.join(preferences.likes)}) and is in stock.",
     )
     return {"recommendation": recommendation}

@@ -21,14 +21,15 @@ class ShoppingRequest(BaseModel):
 
 
 class UserPreferences(BaseModel):
-    """Chapter 1 (Memory) output: what we know about the user's tastes."""
+    """Chapter 1 (User preferences) output: the user's tastes for the requested category."""
 
     user_id: str
-    sizes: dict[str, str] = Field(default_factory=dict)  # e.g. {"shoes": "43"}
-    colours: list[str] = Field(default_factory=list)
-    brands: list[str] = Field(default_factory=list)
-    max_price: Decimal | None = None
-    dislikes: list[str] = Field(default_factory=list)
+    category: str  # inferred from the query, e.g. "shoes"
+    summary: str  # the user's taste and why, in plain language
+    size: str | None = None  # size for this category, e.g. "43"
+    budget: Decimal | None = None  # what the user usually spends in this category
+    likes: list[str] = Field(default_factory=list)  # e.g. ["Asics", "cushioned", "black"]
+    avoid: list[str] = Field(default_factory=list)  # e.g. ["Nike (narrow fit)", "suede"]
 
 
 class ProductOffer(BaseModel):

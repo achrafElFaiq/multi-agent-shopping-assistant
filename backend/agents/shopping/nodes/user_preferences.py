@@ -13,9 +13,11 @@ def build_user_preferences(state: ShoppingState) -> dict[str, UserPreferences]:
     user_id = state["request"].user_id
     preferences = UserPreferences(
         user_id=user_id,
-        sizes={"shoes": "43"},
-        colours=["black", "blue"],
-        brands=["Asics", "Nike"],
-        max_price=Decimal("150"),
+        category="shoes",
+        summary="Prefers cushioned running shoes. Kept all Asics pairs; returned Nike as too narrow.",
+        size="43",
+        budget=Decimal("130"),
+        likes=["Asics", "cushioned", "black"],
+        avoid=["Nike (narrow fit)"],
     )
     return {"preferences": preferences}
