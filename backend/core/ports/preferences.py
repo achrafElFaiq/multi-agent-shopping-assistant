@@ -1,10 +1,11 @@
-"""Data the user preferences tools read about a user.
+"""Where the user preferences tools read their data from.
 
 Each model matches a table in the memory database (`profiles`, `recommendations`).
 """
 
 from datetime import date
 from decimal import Decimal
+from typing import Protocol
 
 from pydantic import BaseModel, Field
 
@@ -28,3 +29,15 @@ class PastRecommendation(BaseModel):
     approved: bool
     reason: str | None = None  # why the user approved or rejected it, e.g. "too narrow"
     recommended_on: date
+
+
+class PreferencesRepository(Protocol):
+    """Reads a user's profile and past recommendations. Implemented by an adapter (mock, Postgres)."""
+
+    def get_profile(self, user_id: str) -> Profile:
+        """Return the user's profile, or an empty one for a new user."""
+        ...
+
+    def get_recommendations(self, user_id: str, category: str) -> list[PastRecommendation]:
+        """Return the user's past recommendations in this category, most recent first."""
+        ...
