@@ -70,8 +70,12 @@ from langgraph.types import Command
 
 from backend.agents.shopping.graph import build_graph
 from backend.agents.shopping.schemas import ShoppingRequest
+from backend.config.settings import load_settings
+from backend.core.adapters.mock_preferences import MockPreferencesRepository
+from backend.core.adapters.openrouter import make_chat_model
 
-graph = build_graph()
+# needs OPENROUTER_API_KEY in .env
+graph = build_graph(make_chat_model(load_settings()), MockPreferencesRepository())
 config = {"configurable": {"thread_id": "order-1"}}
 
 request = ShoppingRequest(user_id="user-1", query="running shoes", spending_limit="120")
