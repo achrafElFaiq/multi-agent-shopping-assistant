@@ -58,6 +58,5 @@ class MockPreferencesRepository:
     def get_profile(self, user_id: str) -> Profile:
         return self._profiles.get(user_id, Profile())
 
-    def get_recommendations(self, user_id: str, category: str) -> list[PastRecommendation]:
-        matching = [r for r in self._recommendations.get(user_id, []) if r.category == category]
-        return sorted(matching, key=lambda r: r.recommended_on, reverse=True)
+    def get_recommendations(self, user_id: str) -> list[PastRecommendation]:
+        return sorted(self._recommendations.get(user_id, []), key=lambda r: r.recommended_on, reverse=True)

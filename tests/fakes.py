@@ -30,7 +30,7 @@ class FakeChatModel(GenericFakeChatModel):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> AIMessage:
-        self.seen_inputs.append(input)
+        self.seen_inputs.append(list(input) if isinstance(input, list) else input)  # a snapshot, not a reference
         return super().invoke(input, config, stop=stop, **kwargs)
 
     def bind_tools(

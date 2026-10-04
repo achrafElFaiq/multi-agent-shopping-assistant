@@ -38,6 +38,6 @@ class PreferencesRepository(Protocol):
         """Return the user's profile, or an empty one for a new user."""
         ...
 
-    def get_recommendations(self, user_id: str, category: str) -> list[PastRecommendation]:
-        """Return the user's past recommendations in this category, most recent first."""
+    def get_recommendations(self, user_id: str) -> list[PastRecommendation]:
+        """Return all the user's past recommendations, in every category, most recent first."""
         ...

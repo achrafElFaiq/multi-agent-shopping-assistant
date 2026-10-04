@@ -18,7 +18,7 @@ request ─► user_preferences ─► product_search ─► approval ─► pay
 
 | Step | What it does | Output | Planned tech |
 |---|---|---|---|
-| **1. User preferences** | Remembers what you bought and returned, and learns your sizes, colours, brands, budget, and what didn't work. Can explain why it thinks you like something. | `UserPreferences` | PostgreSQL, Qdrant, LLM agent with tools |
+| **1. User preferences** | Remembers what you bought and returned, and learns your sizes, colours, brands, budget, and what didn't work. Can explain why it thinks you like something. | `UserPreferences` | LLM agent with tools (via OpenRouter), PostgreSQL, Qdrant |
 | **2. Product search** | Searches several stores at once for price, stock, and delivery date. Reads reviews and return policies, ranks the options, and explains its choice. | `Recommendation` | A2A, MCP, hybrid RAG |
 | **3. Approval** | Double-checks the recommendation, shows you the product, store, price, and why — then **waits** until you approve or cancel. | `ApprovalDecision` | LangGraph `interrupt()` |
 | **4. Payment** | Completes the checkout, only with your approval and never above your spending limit. | `PaymentResult` | AP2, ACP, Stripe test mode |
@@ -35,7 +35,9 @@ External services: a **memory database** (purchase history and preferences), **t
 | ✅ | Real human-in-the-loop pause at approval |
 | ✅ | Payment safety rules: no payment without approval, none above the limit |
 | ✅ | End-to-end tests and CI (lint, types, tests) |
-| 🚧 | User preferences as an LLM agent with tools ([#8](../../issues/8), [#10](../../issues/10), [#11](../../issues/11)) |
+| ✅ | User preferences as an LLM agent with mock tools ([#8](../../issues/8)) |
+| ✅ | An invalid approval answer asks again instead of blocking the order |
+| 🚧 | User preferences tools reading from PostgreSQL ([#10](../../issues/10), [#11](../../issues/11)) |
 | 🚧 | PostgreSQL ([#9](../../issues/9)) |
 | ⬜ | Product search, approval, and payment in depth |
 
@@ -52,7 +54,7 @@ uv sync                 # create .venv and install exact versions from uv.lock
 cp .env.example .env    # then add your OpenRouter key to .env (never commit it)
 ```
 
-The tests don't need a key: they use a fake model.
+The model is set by `LLM_MODEL` in `.env` (any [OpenRouter](https://openrouter.ai/models) model id). The tests don't need a key: they use a fake model.
 
 Run the checks — the same ones CI runs:
 
@@ -63,7 +65,18 @@ uv run ruff format .    # format
 uv run mypy .           # type check (strict)
 ```
 
-### Using the graph
+### Try it in the terminal
+
+Runs the whole graph with the real model, shows each step, and pauses for your approval. User data comes from the mock repository (`user-1` has a profile and past recommendations).
+
+```bash
+uv run python -m backend.agents.shopping "running shoes" \
+  --user user-1 --limit 120 --currency EUR --deliver-by 2026-10-20
+```
+
+Add `--raw` to print every HTTP request sent to the model and its full response (tokens and cost included).
+
+### Using the graph in code
 
 ```python
 from langgraph.types import Command
@@ -78,7 +91,9 @@ from backend.core.adapters.openrouter import make_chat_model
 graph = build_graph(make_chat_model(load_settings()), MockPreferencesRepository())
 config = {"configurable": {"thread_id": "order-1"}}
 
-request = ShoppingRequest(user_id="user-1", query="running shoes", spending_limit="120")
+request = ShoppingRequest(
+    user_id="user-1", query="running shoes", spending_limit="120", currency="EUR", deliver_by="2026-10-20"
+)
 result = graph.invoke({"request": request}, config)
 print(result["__interrupt__"][0].value)  # the recommendation shown to the user
 
@@ -91,14 +106,19 @@ print(result["payment"])  # status='paid' ...
 ```
 backend/
   agents/shopping/
+    __main__.py       # terminal app: python -m backend.agents.shopping
     schemas.py        # data passed between steps (Pydantic)
     state.py          # state shared by all nodes
     graph.py          # the four steps wired together
     nodes/            # one file per step
-  core/ports/         # interfaces to external services (planned)
-  core/adapters/      # their implementations (planned)
+    tools/            # tools the LLM agents can call
+  config/settings.py  # settings from environment variables and .env
+  core/ports/         # interfaces to external services (e.g. PreferencesRepository)
+  core/adapters/      # their implementations: mock data, OpenRouter model (Postgres planned)
   mcp_servers/        # MCP servers (planned)
 tests/
+  fakes.py            # fake chat model: no network, no key
+  unit/               # one node or tool at a time
   e2e/                # full graph runs
 ```
 
@@ -153,4 +173,4 @@ Work on a branch named after the scope (e.g. `user_preferences/agent-with-mock-t
 
 ## Stack
 
-Python 3.12 · LangGraph · Pydantic · FastAPI · PostgreSQL · Qdrant · Next.js · Docker · uv · pytest · ruff · mypy
+Python 3.12 · LangGraph · LangChain · OpenRouter · Pydantic · FastAPI · PostgreSQL · Qdrant · Next.js · Docker · uv · pytest · ruff · mypy

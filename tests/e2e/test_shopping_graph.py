@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -18,13 +19,21 @@ def build_graph() -> ShoppingGraph:
     """The real graph, with a fake model that answers without calling tools."""
     model = FakeChatModel(
         messages=iter([AIMessage("I have what I need.")]),
-        structured_answer=UserPreferences(user_id="user-1", category="shoes", summary="Likes Asics."),
+        structured_answer=UserPreferences(
+            user_id="user-1", category="shoes", summary="Likes Asics.", size="43", budget=None, likes=[], avoid=[]
+        ),
     )
     return build_real_graph(model, MockPreferencesRepository())
 
 
 def make_request(spending_limit: str = "200") -> ShoppingRequest:
-    return ShoppingRequest(user_id="user-1", query="running shoes", spending_limit=Decimal(spending_limit))
+    return ShoppingRequest(
+        user_id="user-1",
+        query="running shoes",
+        spending_limit=Decimal(spending_limit),
+        currency="EUR",
+        deliver_by=date(2026, 10, 20),
+    )
 
 
 def test_graph_compiles() -> None:

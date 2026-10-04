@@ -1,7 +1,8 @@
 """Run the shopping agent in the terminal, with the real model, showing every step.
 
-    uv run python -m backend.agents.shopping "running shoes" --limit 120
-    uv run python -m backend.agents.shopping "running shoes" --raw    # also print the raw HTTP calls to the model
+    uv run python -m backend.agents.shopping "running shoes" \
+        --user user-1 --limit 120 --currency EUR --deliver-by 2026-10-20
+    Add --raw to also print the raw HTTP calls to the model.
 
 Needs OPENROUTER_API_KEY in .env. User data comes from the mock repository (try --user user-1).
 """
@@ -9,6 +10,7 @@ Needs OPENROUTER_API_KEY in .env. User data comes from the mock repository (try 
 import argparse
 import json
 import time
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -114,8 +116,10 @@ def run_until_pause(graph: ShoppingGraph, graph_input: Any, config: RunnableConf
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the shopping agent in the terminal, showing every step.")
     parser.add_argument("query", help='what to buy, e.g. "running shoes"')
-    parser.add_argument("--limit", default="120", help="spending limit in EUR (default: 120)")
-    parser.add_argument("--user", default="user-1", help="user id from the mock data (default: user-1)")
+    parser.add_argument("--user", required=True, help="user id from the mock data, e.g. user-1")
+    parser.add_argument("--limit", required=True, type=Decimal, help="spending limit, e.g. 120")
+    parser.add_argument("--currency", required=True, help="currency of the limit, e.g. EUR")
+    parser.add_argument("--deliver-by", required=True, type=date.fromisoformat, help="deadline, e.g. 2026-10-20")
     parser.add_argument("--raw", action="store_true", help="also print the full HTTP requests and responses")
     args = parser.parse_args()
 
@@ -125,11 +129,18 @@ def main() -> None:
     tracer = Tracer()
     thread_id = str(uuid4())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [tracer]}
-    request = ShoppingRequest(user_id=args.user, query=args.query, spending_limit=Decimal(args.limit))
+    request = ShoppingRequest(
+        user_id=args.user,
+        query=args.query,
+        spending_limit=args.limit,
+        currency=args.currency,
+        deliver_by=args.deliver_by,
+    )
 
     print(f"{DIM}model:   {settings.llm_model}")
     print(f"thread:  {thread_id}{RESET}")
-    print(f"{BOLD}request: {request.query}{RESET} (user {request.user_id}, limit €{request.spending_limit})\n")
+    print(f"{BOLD}request: {request.query}{RESET}", end=" ")
+    print(f"(user {request.user_id}, limit {request.spending_limit} {request.currency}, by {request.deliver_by})\n")
 
     run_until_pause(graph, {"request": request}, config)
 
