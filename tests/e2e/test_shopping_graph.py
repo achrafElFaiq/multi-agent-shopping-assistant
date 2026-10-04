@@ -72,3 +72,16 @@ def test_over_limit_is_blocked() -> None:
     result = graph.invoke(Command(resume={"action": "approve"}), config)
 
     assert result["payment"].status == "blocked"
+
+
+def test_invalid_answer_asks_again() -> None:
+    graph = build_graph()
+    config: RunnableConfig = {"configurable": {"thread_id": "invalid"}}
+    graph.invoke({"request": make_request()}, config)
+
+    graph.invoke(Command(resume={"action": "yes"}), config)
+
+    [question] = graph.get_state(config).interrupts  # paused again: still waiting for an answer
+    assert question.value["error"] == "Please answer approve or cancel."
+    result = graph.invoke(Command(resume={"action": "approve"}), config)
+    assert result["payment"].status == "paid"
