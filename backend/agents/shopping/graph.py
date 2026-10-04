@@ -3,6 +3,7 @@
 user_preferences -> product_search -> approval (pauses for the user) -> payment
 """
 
+from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
@@ -11,7 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 from backend.agents.shopping.nodes.approval import ask_approval
 from backend.agents.shopping.nodes.payment import pay
 from backend.agents.shopping.nodes.product_search import search_products
-from backend.agents.shopping.nodes.user_preferences import build_user_preferences
+from backend.agents.shopping.nodes.user_preferences import make_user_preferences_node
 from backend.agents.shopping.schemas import (
     ApprovalDecision,
     PaymentResult,
@@ -21,6 +22,7 @@ from backend.agents.shopping.schemas import (
     UserPreferences,
 )
 from backend.agents.shopping.state import ShoppingState
+from backend.core.ports.preferences import PreferencesRepository
 
 # Our types the checkpointer is allowed to load back from a saved state.
 CHECKPOINT_TYPES = [
@@ -35,10 +37,11 @@ CHECKPOINT_TYPES = [
 type ShoppingGraph = CompiledStateGraph[ShoppingState, None, ShoppingState, ShoppingState]
 
 
-def build_graph() -> ShoppingGraph:
+def build_graph(model: BaseChatModel, repository: PreferencesRepository) -> ShoppingGraph:
+    """Build the agent. The caller chooses the model and the data source (real ones in the app, fakes in tests)."""
     graph = StateGraph(ShoppingState)
 
-    graph.add_node("user_preferences", build_user_preferences)
+    graph.add_node("user_preferences", make_user_preferences_node(model, repository))
     graph.add_node("product_search", search_products)
     graph.add_node("approval", ask_approval)
     graph.add_node("payment", pay)

@@ -11,24 +11,28 @@ from pydantic import BaseModel, Field
 
 
 class ShoppingRequest(BaseModel):
-    """What the user asked for. Input to the whole graph."""
+    """What the user asked for. Input to the whole graph. Every field is required."""
 
     user_id: str
     query: str = Field(min_length=1)
-    spending_limit: Decimal = Field(gt=0)
-    currency: str = "EUR"
-    deliver_by: date | None = None
+    spending_limit: Decimal = Field(gt=0)  # hard maximum for this purchase
+    currency: str  # e.g. "EUR"
+    deliver_by: date
 
 
 class UserPreferences(BaseModel):
-    """Chapter 1 (Memory) output: what we know about the user's tastes."""
+    """Chapter 1 (User preferences) output: the user's tastes for the requested category.
 
-    user_id: str
-    sizes: dict[str, str] = Field(default_factory=dict)  # e.g. {"shoes": "43"}
-    colours: list[str] = Field(default_factory=list)
-    brands: list[str] = Field(default_factory=list)
-    max_price: Decimal | None = None
-    dislikes: list[str] = Field(default_factory=list)
+    Every field is required, so whoever fills it in must decide on each one. None means unknown.
+    """
+
+    user_id: str  # always set by the code from the request, never trusted from the model
+    category: str  # inferred from the query, e.g. "shoes"
+    summary: str  # the user's taste and why, in plain language
+    size: str | None  # size for this category, e.g. "43"
+    budget: Decimal | None  # what the user usually spends in this category
+    likes: list[str]  # e.g. ["Asics", "cushioned", "black"]
+    avoid: list[str]  # e.g. ["narrow fit", "suede"]
 
 
 class ProductOffer(BaseModel):
