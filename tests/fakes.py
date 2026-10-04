@@ -6,7 +6,7 @@ from typing import Any
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
@@ -14,11 +14,24 @@ from pydantic import BaseModel
 class FakeChatModel(GenericFakeChatModel):
     """Replies with `messages` in order (they may contain tool calls).
 
+    Every conversation sent to it is recorded in `seen_inputs`.
     Structured output returns `structured_answer`, and records the conversation it was given in `last_input`.
     """
 
     structured_answer: BaseModel | None = None
     last_input: Any = None
+    seen_inputs: list[Any] = []
+
+    def invoke(
+        self,
+        input: LanguageModelInput,
+        config: RunnableConfig | None = None,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> AIMessage:
+        self.seen_inputs.append(input)
+        return super().invoke(input, config, stop=stop, **kwargs)
 
     def bind_tools(
         self,
