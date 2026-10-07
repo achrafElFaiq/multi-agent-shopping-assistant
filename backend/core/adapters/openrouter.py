@@ -15,5 +15,6 @@ def make_chat_model(settings: Settings, http_client: httpx.Client | None = None)
         api_key=settings.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         temperature=0,
+        max_completion_tokens=2048,
         http_client=http_client,
     )

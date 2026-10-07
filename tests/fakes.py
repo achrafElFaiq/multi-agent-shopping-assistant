@@ -14,6 +14,7 @@ class FakeChatModel(GenericFakeChatModel):
     """Replies with `messages` in order and records each conversation in `seen_inputs`."""
 
     seen_inputs: list[Any] = []
+    tool_choices: list[str | None] = []
 
     def invoke(
         self,
@@ -33,4 +34,5 @@ class FakeChatModel(GenericFakeChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
+        self.tool_choices.append(tool_choice)
         return self

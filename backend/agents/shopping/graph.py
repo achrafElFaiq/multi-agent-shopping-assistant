@@ -3,8 +3,11 @@
 user_preferences -> product_search -> approval (pauses for the user) -> payment
 """
 
+from typing import get_type_hints
+
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -33,5 +36,9 @@ def build_graph(model: BaseChatModel, repository: PreferencesRepository) -> Shop
     graph.add_edge("approval", "payment")
     graph.add_edge("payment", END)
 
-    # The checkpointer saves the state, so the graph can pause at approval and resume later.
-    return graph.compile(checkpointer=InMemorySaver())
+    # Register the state models so checkpoints can restore them without warnings.
+    return graph.compile(
+        checkpointer=InMemorySaver(
+            serde=JsonPlusSerializer(allowed_msgpack_modules=list(get_type_hints(ShoppingState).values()))
+        )
+    )

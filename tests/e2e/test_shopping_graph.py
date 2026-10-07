@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -89,3 +89,44 @@ def test_invalid_answer_asks_again(repository: PostgresPreferencesRepository) ->
     assert question.value["error"] == "Please answer approve or cancel."
     result = graph.invoke(Command(resume={"action": "approve"}), config)
     assert result["payment"].status == "paid"
+
+
+def test_new_category_asks_saves_answer_and_continues_to_approval(
+    repository: PostgresPreferencesRepository,
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = [
+        ("get_preferences", {"category": "coffee"}),
+        ("ask_user", {"question": "Quelle torréfaction préfères-tu ?"}),
+        ("update_preferences", {"category": "coffee", "changes": {"likes": ["light roast"]}}),
+        ("submit_preferences", {"category": "coffee", "summary": "Prefers light roast.", "likes": ["light roast"]}),
+    ]
+    model = FakeChatModel(
+        messages=iter(AIMessage("", tool_calls=[ToolCall(name=name, args=args, id=name)]) for name, args in calls)
+    )
+    graph = build_real_graph(model, repository)
+    config: RunnableConfig = {"configurable": {"thread_id": "new-category"}}
+    request = make_request().model_copy(update={"query": "Je cherche du café de spécialité"})
+
+    graph.invoke({"request": request}, config)
+
+    paused = graph.get_state(config)
+    assert paused.next == ("user_preferences",)
+    assert paused.interrupts[0].value == {"type": "preferences", "question": "Quelle torréfaction préfères-tu ?"}
+    assert model.tool_choices == ["get_preferences", "ask_user"]
+    assert repository.get_preferences("coffee") is None
+
+    result = graph.invoke(Command(resume="Je préfère une torréfaction légère"), config)
+
+    assert model.tool_choices == ["get_preferences", "ask_user", "required", "required"]
+    assert model.seen_inputs[2][-1].content == "Je préfère une torréfaction légère"
+    stored = repository.get_preferences("coffee")
+    assert stored is not None
+    assert stored.preferences.likes == ["light roast"]
+    assert result["preferences"].likes == ["light roast"]
+    assert "recommendation" in result
+    assert "payment" not in result
+    assert graph.get_state(config).next == ("approval",)
+
+    result = graph.invoke(Command(resume={"action": "cancel"}), config)
+    assert result["payment"].status == "cancelled"
+    assert graph.get_state(config).next == ()

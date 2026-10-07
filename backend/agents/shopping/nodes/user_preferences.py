@@ -17,12 +17,14 @@ SYSTEM_PROMPT = """Prepare preferences for a single shopper's current request.
 The input contains the shopping request, existing categories, and stored general preferences.
 
 1. Choose a relevant existing category, or a short, consistent name for a new one.
-   Call get_preferences to read that category and any other relevant categories before submitting.
+   Call get_preferences for that category first; general preferences are already provided.
+   Read any other relevant categories before submitting.
 2. Combine general and category preferences with the request. Category details override general ones;
    the current request overrides stored preferences for this purchase.
-3. If essential information is still missing (for example shoe size), call ask_user alone with one
-   concise question in the user's language. Use the answer as context. Do not ask again for known
-   information or details the user declines to provide. Leave optional gaps empty or null.
+3. For a new category, ask_user at least once before submitting, about the most useful missing preference.
+   Also ask if essential information is missing in a known category (for example shoe size).
+   Call ask_user alone with one concise question in the user's language. Use the answer as context.
+   Do not repeat known information or details the user declines to provide. Leave optional gaps empty or null.
 4. Use update_preferences only for lasting preferences explicitly stated about the shopper,
    including answers to your questions.
    Read a category before updating it. Preserve existing list entries unless the user changes them.
@@ -41,10 +43,20 @@ class UserPreferencesNode(Protocol):
 
 def make_user_preferences_node(model: BaseChatModel, repository: PreferencesRepository) -> UserPreferencesNode:
     tools = make_preference_tools(repository)
-    model_with_tools = model.bind_tools(tools, tool_choice="required")
 
     def call_model(state: MessagesState) -> dict[str, list[BaseMessage]]:
-        return {"messages": [model_with_tools.invoke(state["messages"])]}
+        observations = [
+            message for message in state["messages"] if isinstance(message, ToolMessage) and message.status == "success"
+        ]
+        reads = [message for message in observations if message.name == "get_preferences"]
+        tool_choice = "required"
+        if not reads:
+            tool_choice = "get_preferences"
+        elif not any(message.name == "ask_user" for message in observations) and any(
+            json.loads(str(message.content))["preferences"] is None for message in reads
+        ):
+            tool_choice = "ask_user"
+        return {"messages": [model.bind_tools(tools, tool_choice=tool_choice).invoke(state["messages"])]}
 
     def route_after_tools(state: MessagesState) -> str:
         if any(
