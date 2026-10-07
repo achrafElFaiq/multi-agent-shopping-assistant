@@ -5,7 +5,7 @@ One user, with preferences stored by category. Product search and payment are cu
 
 ## Launch
 
-Requires [uv](https://docs.astral.sh/uv/) and Docker. Run commands from the repository root.
+Requires [uv](https://docs.astral.sh/uv/) and a running PostgreSQL server. Run commands from the repository root.
 
 1. Install dependencies and configure `.env`:
 
@@ -14,27 +14,10 @@ Requires [uv](https://docs.astral.sh/uv/) and Docker. Run commands from the repo
    cp -n .env.example .env
    ```
 
-   Set `OPENROUTER_API_KEY` in `.env`. `LLM_MODEL` selects the model.
+   Set `OPENROUTER_API_KEY` and `LLM_MODEL` in `.env`.
 
-2. Start PostgreSQL with the credentials from `.env.example`:
-
-   ```bash
-   docker run -d --name shopping-postgres \
-     -e POSTGRES_USER=shopping \
-     -e POSTGRES_PASSWORD=shopping \
-     -e POSTGRES_DB=shopping \
-     -p 127.0.0.1:5432:5432 \
-     -v shopping-postgres-data:/var/lib/postgresql/data \
-     postgres:17
-   ```
-
-   Once PostgreSQL is ready, create the test database:
-
-   ```bash
-   docker exec shopping-postgres createdb -U shopping shopping_test
-   ```
-
-   For an existing PostgreSQL server, configure `DATABASE_URL` and `TEST_DATABASE_URL` in `.env` and skip this step.
+2. Create a database on your PostgreSQL server and set `DATABASE_URL` in `.env`.
+   Replace the example credentials with your database name, username, and password.
 
 3. Seed example preferences and launch the agent:
 
@@ -47,6 +30,8 @@ Requires [uv](https://docs.astral.sh/uv/) and Docker. Run commands from the repo
    Enter `approve` or `cancel` when prompted. Add `--raw` to see the HTTP request and response bodies.
 
 ## Checks
+
+Create a separate PostgreSQL database for tests and set `TEST_DATABASE_URL` in `.env`.
 
 ```bash
 uv run pytest
