@@ -14,6 +14,6 @@ def make_chat_model(settings: Settings, http_client: httpx.Client | None = None)
         model=settings.llm_model,
         api_key=settings.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
-        temperature=0,  # same input, same answer: we want filled-in fields, not creativity
+        temperature=0,
         http_client=http_client,
     )

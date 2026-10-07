@@ -1,7 +1,4 @@
-"""Data passed between the four chapters of the shopping agent.
-
-Real implementations of a chapter may change how they work, but must keep these shapes.
-"""
+"""Data passed between the four chapters of the shopping agent."""
 
 from datetime import date
 from decimal import Decimal
@@ -9,30 +6,23 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend.core.ports.preferences import Preferences
+
 
 class ShoppingRequest(BaseModel):
     """What the user asked for. Input to the whole graph. Every field is required."""
 
-    user_id: str
     query: str = Field(min_length=1)
-    spending_limit: Decimal = Field(gt=0)  # hard maximum for this purchase
-    currency: str  # e.g. "EUR"
+    spending_limit: Decimal = Field(gt=0)
+    currency: str
     deliver_by: date
 
 
-class UserPreferences(BaseModel):
-    """Chapter 1 (User preferences) output: the user's tastes for the requested category.
+class UserPreferences(Preferences):
+    """Preferences for the shopping request, with its category and a summary."""
 
-    Every field is required, so whoever fills it in must decide on each one. None means unknown.
-    """
-
-    user_id: str  # always set by the code from the request, never trusted from the model
-    category: str  # inferred from the query, e.g. "shoes"
-    summary: str  # the user's taste and why, in plain language
-    size: str | None  # size for this category, e.g. "43"
-    budget: Decimal | None  # what the user usually spends in this category
-    likes: list[str]  # e.g. ["Asics", "cushioned", "black"]
-    avoid: list[str]  # e.g. ["narrow fit", "suede"]
+    category: str = Field(min_length=1)
+    summary: str
 
 
 class ProductOffer(BaseModel):

@@ -1,34 +1,46 @@
-"""Tools the user preferences agent can call.
-
-They are built for one user: the code fixes `user_id`, so the model can never read another user's data.
-"""
+"""Tools for reading, asking about, and updating a single user's category preferences."""
 
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+from langgraph.types import interrupt
 
 from backend.agents.shopping.schemas import UserPreferences
-from backend.core.ports.preferences import PreferencesRepository
+from backend.core.ports.preferences import Preferences, PreferencesRepository
 
 
-def make_preference_tools(repository: PreferencesRepository, user_id: str) -> list[BaseTool]:
+def make_preference_tools(repository: PreferencesRepository) -> list[BaseTool]:
     @tool
-    def get_profile() -> dict[str, Any]:
-        """Get what the user told us about themselves: sizes and usual budget per category, likes and dislikes."""
-        return repository.get_profile(user_id).model_dump(mode="json")
+    def get_preferences(category: str) -> dict[str, Any]:
+        """Read stored preferences for a category, including general. Null preferences mean the category is unknown."""
+        row = repository.get_preferences(category)
+        return row.model_dump(mode="json") if row is not None else {"category": category, "preferences": None}
 
     @tool
-    def get_recommendations() -> list[dict[str, Any]]:
-        """Get every product we recommended to the user before, in all categories, most recent first. Each one says whether the user approved it and why."""  # noqa: E501
-        return [r.model_dump(mode="json") for r in repository.get_recommendations(user_id)]
+    def ask_user(question: str) -> Any:
+        """Ask one concise question for essential missing preferences. Call this tool alone.
+
+        The user's answer is returned to you; use update_preferences to save lasting facts.
+        """
+        return interrupt({"type": "preferences", "question": question})
+
+    @tool
+    def update_preferences(category: str, changes: Preferences) -> dict[str, Any]:
+        """Save lasting preferences explicitly stated by the user. Send only changed fields.
+
+        Attribute keys merge; supplied lists and the budget replace their previous values.
+        Read the category first and preserve list entries that still apply.
+        """
+        return repository.update_preferences(category, changes).model_dump(mode="json")
 
     # return_direct: calling this tool ends the agent. The model gets the text, the code gets the artifact.
     @tool(args_schema=UserPreferences, return_direct=True, response_format="content_and_artifact")
     def submit_preferences(**preferences: Any) -> tuple[str, UserPreferences]:
-        """Give the user's preferences for this request, once you know enough. This ends your work."""
+        """Submit preferences for this shopping request. This ends your work without saving them to the database."""
         return "Preferences received.", UserPreferences(**preferences)
 
-    # Invalid preferences are sent back to the model as the tool result, so it can fix them.
-    submit_preferences.handle_validation_error = lambda error: f"Invalid preferences: {error}"
-
-    return [get_profile, get_recommendations, submit_preferences]
+    tools = [get_preferences, ask_user, update_preferences, submit_preferences]
+    # Invalid arguments become tool results so the model can correct them.
+    for preference_tool in tools:
+        preference_tool.handle_validation_error = lambda error: f"Invalid preferences: {error}"
+    return tools

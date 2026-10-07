@@ -1,34 +1,49 @@
+"""Shopping flow with real PostgreSQL storage and scripted model responses."""
+
 from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+import pytest
 from langchain_core.messages import AIMessage
+from langchain_core.messages.tool import ToolCall
 from langgraph.types import Command
 
 from backend.agents.shopping.graph import ShoppingGraph
 from backend.agents.shopping.graph import build_graph as build_real_graph
-from backend.agents.shopping.schemas import ShoppingRequest, UserPreferences
-from backend.core.adapters.mock_preferences import MockPreferencesRepository
+from backend.agents.shopping.schemas import ShoppingRequest
+from backend.core.adapters.postgres_preferences import PostgresPreferencesRepository
+from backend.core.ports.preferences import Preferences
 from tests.fakes import FakeChatModel
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
 
 
-def build_graph() -> ShoppingGraph:
-    """The real graph, with a fake model that answers without calling tools."""
+def build_graph(repository: PostgresPreferencesRepository) -> ShoppingGraph:
+    repository.update_preferences("shoes", Preferences(likes=["Asics"]))
     model = FakeChatModel(
-        messages=iter([AIMessage("I have what I need.")]),
-        structured_answer=UserPreferences(
-            user_id="user-1", category="shoes", summary="Likes Asics.", size="43", budget=None, likes=[], avoid=[]
+        messages=iter(
+            [
+                AIMessage("", tool_calls=[ToolCall(name="get_preferences", args={"category": "shoes"}, id="read")]),
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        ToolCall(
+                            name="submit_preferences",
+                            args={"category": "shoes", "summary": "Likes Asics.", "likes": ["Asics"]},
+                            id="submit",
+                        )
+                    ],
+                ),
+            ]
         ),
     )
-    return build_real_graph(model, MockPreferencesRepository())
+    return build_real_graph(model, repository)
 
 
 def make_request(spending_limit: str = "200") -> ShoppingRequest:
     return ShoppingRequest(
-        user_id="user-1",
         query="running shoes",
         spending_limit=Decimal(spending_limit),
         currency="EUR",
@@ -36,61 +51,41 @@ def make_request(spending_limit: str = "200") -> ShoppingRequest:
     )
 
 
-def test_graph_compiles() -> None:
-    graph = build_graph()
+@pytest.mark.parametrize(
+    ("action", "spending_limit", "expected_status"),
+    [("approve", "200", "paid"), ("cancel", "200", "cancelled"), ("approve", "50", "blocked")],
+)
+def test_pauses_before_payment_and_respects_decision_and_limit(
+    repository: PostgresPreferencesRepository, action: str, spending_limit: str, expected_status: str
+) -> None:
+    graph = build_graph(repository)
+    config: RunnableConfig = {"configurable": {"thread_id": "approval"}}
 
-    nodes = graph.get_graph().nodes
-    for name in ["user_preferences", "product_search", "approval", "payment"]:
-        assert name in nodes
+    graph.invoke({"request": make_request(spending_limit)}, config)
 
+    paused = graph.get_state(config)
+    assert paused.next == ("approval",)
+    assert "payment" not in paused.values
+    assert paused.values["preferences"].likes == ["Asics"]
+    assert paused.interrupts[0].value == paused.values["recommendation"].model_dump(mode="json")
 
-def test_graph_pauses_at_approval() -> None:
-    graph = build_graph()
-    config: RunnableConfig = {"configurable": {"thread_id": "pause"}}
+    result = graph.invoke(Command(resume={"action": action}), config)
 
-    graph.invoke({"request": make_request()}, config)
-
-    assert graph.get_state(config).next == ("approval",)
-
-
-def test_approve_pays() -> None:
-    graph = build_graph()
-    config: RunnableConfig = {"configurable": {"thread_id": "approve"}}
-
-    graph.invoke({"request": make_request()}, config)
-    result = graph.invoke(Command(resume={"action": "approve"}), config)
-
-    assert result["payment"].status == "paid"
+    assert result["decision"].action == action
+    assert result["payment"].status == expected_status
+    assert graph.get_state(config).next == ()
 
 
-def test_cancel_does_not_pay() -> None:
-    graph = build_graph()
-    config: RunnableConfig = {"configurable": {"thread_id": "cancel"}}
-
-    graph.invoke({"request": make_request()}, config)
-    result = graph.invoke(Command(resume={"action": "cancel"}), config)
-
-    assert result["payment"].status == "cancelled"
-
-
-def test_over_limit_is_blocked() -> None:
-    graph = build_graph()
-    config: RunnableConfig = {"configurable": {"thread_id": "limit"}}
-
-    graph.invoke({"request": make_request(spending_limit="50")}, config)
-    result = graph.invoke(Command(resume={"action": "approve"}), config)
-
-    assert result["payment"].status == "blocked"
-
-
-def test_invalid_answer_asks_again() -> None:
-    graph = build_graph()
+def test_invalid_answer_asks_again(repository: PostgresPreferencesRepository) -> None:
+    graph = build_graph(repository)
     config: RunnableConfig = {"configurable": {"thread_id": "invalid"}}
     graph.invoke({"request": make_request()}, config)
 
     graph.invoke(Command(resume={"action": "yes"}), config)
 
-    [question] = graph.get_state(config).interrupts  # paused again: still waiting for an answer
+    paused = graph.get_state(config)
+    assert "payment" not in paused.values
+    [question] = paused.interrupts
     assert question.value["error"] == "Please answer approve or cancel."
     result = graph.invoke(Command(resume={"action": "approve"}), config)
     assert result["payment"].status == "paid"

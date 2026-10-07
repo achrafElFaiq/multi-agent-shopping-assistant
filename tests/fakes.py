@@ -6,20 +6,13 @@ from typing import Any
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
 
 
 class FakeChatModel(GenericFakeChatModel):
-    """Replies with `messages` in order (they may contain tool calls).
+    """Replies with `messages` in order and records each conversation in `seen_inputs`."""
 
-    Every conversation sent to it is recorded in `seen_inputs`.
-    Structured output returns `structured_answer`, and records the conversation it was given in `last_input`.
-    """
-
-    structured_answer: BaseModel | None = None
-    last_input: Any = None
     seen_inputs: list[Any] = []
 
     def invoke(
@@ -41,10 +34,3 @@ class FakeChatModel(GenericFakeChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         return self
-
-    def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable[LanguageModelInput, Any]:
-        def answer(conversation: LanguageModelInput) -> BaseModel | None:
-            self.last_input = conversation
-            return self.structured_answer
-
-        return RunnableLambda(answer)
