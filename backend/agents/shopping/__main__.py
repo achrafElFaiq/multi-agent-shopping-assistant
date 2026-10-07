@@ -1,10 +1,11 @@
 """Run the shopping agent in the terminal, with the real model, showing every step.
 
     uv run python -m backend.agents.shopping "running shoes" \
-        --user user-1 --limit 120 --currency EUR --deliver-by 2026-10-20
+        --limit 120 --currency EUR --deliver-by 2026-10-20
     Add --raw to also print the raw HTTP calls to the model.
 
-Needs OPENROUTER_API_KEY in .env. User data comes from the mock repository (try --user user-1).
+Needs OPENROUTER_API_KEY, LLM_MODEL and DATABASE_URL in .env.
+Seed example preferences with: uv run python -m backend.seed
 """
 
 import argparse
@@ -25,8 +26,8 @@ from langgraph.types import Command
 from backend.agents.shopping.graph import ShoppingGraph, build_graph
 from backend.agents.shopping.schemas import ShoppingRequest
 from backend.config.settings import load_settings
-from backend.core.adapters.mock_preferences import MockPreferencesRepository
 from backend.core.adapters.openrouter import make_chat_model
+from backend.core.adapters.postgres_preferences import PostgresPreferencesRepository
 
 BLUE, PURPLE, YELLOW, GREEN, RED, DIM, BOLD, RESET = (
     "\033[34m", "\033[35m", "\033[33m", "\033[32m", "\033[31m", "\033[2m", "\033[1m", "\033[0m"
@@ -104,7 +105,7 @@ def run_until_pause(graph: ShoppingGraph, graph_input: Any, config: RunnableConf
         for node, output in update.items():
             elapsed = time.perf_counter() - started
             if node == "__interrupt__":
-                print(f"{BOLD}{PURPLE}■ approval{RESET} {DIM}paused, waiting for you{RESET}")
+                print(f"{BOLD}{PURPLE}■ user input{RESET} {DIM}paused, waiting for you{RESET}")
                 continue
             print(f"{BOLD}{PURPLE}■ {node}{RESET} {DIM}done in {elapsed:.1f}s{RESET}")
             for key, value in (output or {}).items():
@@ -116,7 +117,6 @@ def run_until_pause(graph: ShoppingGraph, graph_input: Any, config: RunnableConf
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the shopping agent in the terminal, showing every step.")
     parser.add_argument("query", help='what to buy, e.g. "running shoes"')
-    parser.add_argument("--user", required=True, help="user id from the mock data, e.g. user-1")
     parser.add_argument("--limit", required=True, type=Decimal, help="spending limit, e.g. 120")
     parser.add_argument("--currency", required=True, help="currency of the limit, e.g. EUR")
     parser.add_argument("--deliver-by", required=True, type=date.fromisoformat, help="deadline, e.g. 2026-10-20")
@@ -125,12 +125,12 @@ def main() -> None:
 
     settings = load_settings()
     http_client = raw_http_client() if args.raw else None
-    graph = build_graph(make_chat_model(settings, http_client), MockPreferencesRepository())
+    repository = PostgresPreferencesRepository(settings.database_url.get_secret_value())
+    graph = build_graph(make_chat_model(settings, http_client), repository)
     tracer = Tracer()
     thread_id = str(uuid4())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [tracer]}
     request = ShoppingRequest(
-        user_id=args.user,
         query=args.query,
         spending_limit=args.limit,
         currency=args.currency,
@@ -140,23 +140,29 @@ def main() -> None:
     print(f"{DIM}model:   {settings.llm_model}")
     print(f"thread:  {thread_id}{RESET}")
     print(f"{BOLD}request: {request.query}{RESET}", end=" ")
-    print(f"(user {request.user_id}, limit {request.spending_limit} {request.currency}, by {request.deliver_by})\n")
+    print(f"(limit {request.spending_limit} {request.currency}, by {request.deliver_by})\n")
 
     run_until_pause(graph, {"request": request}, config)
 
-    recommendation = graph.get_state(config).interrupts[0].value
-    offer = recommendation["offer"]
-    print(f"   {offer['name']} at {offer['store']}: {BOLD}€{offer['price']}{RESET}, delivered {offer['delivery_date']}")
-    print(f"   why: {recommendation['reason']}\n")
+    while (state := graph.get_state(config)).interrupts:
+        question = state.interrupts[0].value
+        answer: str | dict[str, str]
+        if question.get("type") == "preferences":
+            answer = input(f"{BOLD}{question['question']} {RESET}").strip()
+        else:
+            offer = question["offer"]
+            print(
+                f"   {offer['name']} at {offer['store']}: {BOLD}{offer['price']} {offer['currency']}{RESET}, "
+                f"delivered {offer['delivery_date']}"
+            )
+            print(f"   why: {question['reason']}\n")
+            if question.get("error"):
+                print(question["error"])
+            answer = {"action": input(f"{BOLD}Approve or cancel? [approve/cancel] {RESET}").strip().lower()}
+        print()
+        run_until_pause(graph, Command(resume=answer), config)
 
-    action = ""
-    while action not in ("approve", "cancel"):
-        action = input(f"{BOLD}Approve or cancel? [approve/cancel] {RESET}").strip().lower()
-    print()
-
-    run_until_pause(graph, Command(resume={"action": action}), config)
-
-    payment = graph.get_state(config).values["payment"]
+    payment = state.values["payment"]
     color = {"paid": GREEN, "cancelled": YELLOW, "blocked": RED}[payment.status]
     print(f"{BOLD}result: {color}{payment.status}{RESET}", end="   ")
     print(f"{DIM}model calls: {tracer.model_calls}, tokens: {tracer.total_tokens}{RESET}")

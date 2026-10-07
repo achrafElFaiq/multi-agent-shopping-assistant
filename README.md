@@ -1,176 +1,58 @@
 # AI Shopping Assistant
 
-Tell it what you need and it does the shopping for you:
+LangGraph shopping assistant with an OpenRouter model and PostgreSQL preferences.
+One user, with preferences stored by category. Product search and payment are currently demos.
 
-> "Buy me running shoes under €120, delivered by Friday."
+## Launch
 
-It knows your tastes, searches several stores, picks the best option, asks for your OK, and pays — never more than you allow.
+Requires [uv](https://docs.astral.sh/uv/) and Docker. Run commands from the repository root.
 
-## How it works
+1. Install dependencies and configure `.env`:
 
-One **LangGraph agent** made of four steps. Each step reads from a shared state and adds its own result.
+   ```bash
+   uv sync --locked
+   cp -n .env.example .env
+   ```
 
-```
-request ─► user_preferences ─► product_search ─► approval ─► payment ─► result
-                 │                   │               │           │
-             Memory DB          Store agents        You     Payment services
-```
+   Set `OPENROUTER_API_KEY` in `.env`. `LLM_MODEL` selects the model.
 
-| Step | What it does | Output | Planned tech |
-|---|---|---|---|
-| **1. User preferences** | Remembers what you bought and returned, and learns your sizes, colours, brands, budget, and what didn't work. Can explain why it thinks you like something. | `UserPreferences` | LLM agent with tools (via OpenRouter), PostgreSQL, Qdrant |
-| **2. Product search** | Searches several stores at once for price, stock, and delivery date. Reads reviews and return policies, ranks the options, and explains its choice. | `Recommendation` | A2A, MCP, hybrid RAG |
-| **3. Approval** | Double-checks the recommendation, shows you the product, store, price, and why — then **waits** until you approve or cancel. | `ApprovalDecision` | LangGraph `interrupt()` |
-| **4. Payment** | Completes the checkout, only with your approval and never above your spending limit. | `PaymentResult` | AP2, ACP, Stripe test mode |
+2. Start PostgreSQL with the credentials from `.env.example`:
 
-The data passed between steps is defined once, as Pydantic models, in [`schemas.py`](backend/agents/shopping/schemas.py). A real implementation of a step may change how it works, but must keep these shapes.
+   ```bash
+   docker run -d --name shopping-postgres \
+     -e POSTGRES_USER=shopping \
+     -e POSTGRES_PASSWORD=shopping \
+     -e POSTGRES_DB=shopping \
+     -p 127.0.0.1:5432:5432 \
+     -v shopping-postgres-data:/var/lib/postgresql/data \
+     postgres:17
+   ```
 
-External services: a **memory database** (purchase history and preferences), **test stores** (Shopify development stores and simulated stores), and **Stripe test mode** — no real money is involved.
+   Once PostgreSQL is ready, create the test database:
 
-## Status
+   ```bash
+   docker exec shopping-postgres createdb -U shopping shopping_test
+   ```
 
-| | |
-|---|---|
-| ✅ | End-to-end graph with all four steps as stubs |
-| ✅ | Real human-in-the-loop pause at approval |
-| ✅ | Payment safety rules: no payment without approval, none above the limit |
-| ✅ | End-to-end tests and CI (lint, types, tests) |
-| ✅ | User preferences as an LLM agent with mock tools ([#8](../../issues/8)) |
-| ✅ | An invalid approval answer asks again instead of blocking the order |
-| 🚧 | User preferences tools reading from PostgreSQL ([#10](../../issues/10), [#11](../../issues/11)) |
-| 🚧 | PostgreSQL ([#9](../../issues/9)) |
-| ⬜ | Product search, approval, and payment in depth |
+   For an existing PostgreSQL server, configure `DATABASE_URL` and `TEST_DATABASE_URL` in `.env` and skip this step.
 
-**Build order:** basic version of all four steps → product search → approval → payment. User preferences is built in parallel.
+3. Seed example preferences and launch the agent:
 
-## Getting started
+   ```bash
+   uv run python -m backend.seed
+   uv run python -m backend.agents.shopping "running shoes" \
+     --limit 120 --currency EUR --deliver-by 2026-10-20
+   ```
 
-Requirements: [uv](https://docs.astral.sh/uv/) (`brew install uv`). uv installs the right Python version for you.
+   Enter `approve` or `cancel` when prompted. Add `--raw` to see the HTTP request and response bodies.
 
-```bash
-git clone git@github.com:achrafElFaiq/multi-agent-shopping-assistant.git
-cd multi-agent-shopping-assistant
-uv sync                 # create .venv and install exact versions from uv.lock
-cp .env.example .env    # then add your OpenRouter key to .env (never commit it)
-```
-
-The model is set by `LLM_MODEL` in `.env` (any [OpenRouter](https://openrouter.ai/models) model id). The tests don't need a key: they use a fake model.
-
-Run the checks — the same ones CI runs:
+## Checks
 
 ```bash
-uv run pytest           # tests
-uv run ruff check .     # lint
-uv run ruff format .    # format
-uv run mypy .           # type check (strict)
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy .
 ```
 
-### Try it in the terminal
-
-Runs the whole graph with the real model, shows each step, and pauses for your approval. User data comes from the mock repository (`user-1` has a profile and past recommendations).
-
-```bash
-uv run python -m backend.agents.shopping "running shoes" \
-  --user user-1 --limit 120 --currency EUR --deliver-by 2026-10-20
-```
-
-Add `--raw` to print every HTTP request sent to the model and its full response (tokens and cost included).
-
-### Using the graph in code
-
-```python
-from langgraph.types import Command
-
-from backend.agents.shopping.graph import build_graph
-from backend.agents.shopping.schemas import ShoppingRequest
-from backend.config.settings import load_settings
-from backend.core.adapters.mock_preferences import MockPreferencesRepository
-from backend.core.adapters.openrouter import make_chat_model
-
-# needs OPENROUTER_API_KEY in .env
-graph = build_graph(make_chat_model(load_settings()), MockPreferencesRepository())
-config = {"configurable": {"thread_id": "order-1"}}
-
-request = ShoppingRequest(
-    user_id="user-1", query="running shoes", spending_limit="120", currency="EUR", deliver_by="2026-10-20"
-)
-result = graph.invoke({"request": request}, config)
-print(result["__interrupt__"][0].value)  # the recommendation shown to the user
-
-result = graph.invoke(Command(resume={"action": "approve"}), config)
-print(result["payment"])  # status='paid' ...
-```
-
-## Project structure
-
-```
-backend/
-  agents/shopping/
-    __main__.py       # terminal app: python -m backend.agents.shopping
-    schemas.py        # data passed between steps (Pydantic)
-    state.py          # state shared by all nodes
-    graph.py          # the four steps wired together
-    nodes/            # one file per step
-    tools/            # tools the LLM agents can call
-  config/settings.py  # settings from environment variables and .env
-  core/ports/         # interfaces to external services (e.g. PreferencesRepository)
-  core/adapters/      # their implementations: mock data, OpenRouter model (Postgres planned)
-  mcp_servers/        # MCP servers (planned)
-tests/
-  fakes.py            # fake chat model: no network, no key
-  unit/               # one node or tool at a time
-  e2e/                # full graph runs
-```
-
-## Contributing
-
-### Dependencies
-
-uv is the only tool for dependencies — no `pip install`.
-
-```bash
-uv add <package>          # app dependency
-uv add --dev <package>    # dev tool
-uv remove <package>
-uv lock --upgrade         # upgrade, in its own commit
-```
-
-- Commit `pyproject.toml` and `uv.lock` **together**. Never edit `uv.lock` by hand.
-- On a merge conflict in `uv.lock`, take either side, run `uv lock`, and commit the result.
-
-### Issues
-
-```
-Title:  scope: what to do
-
-What: one or two sentences.
-Done when: how we know it's finished.
-Blocked by: #N (if any)
-```
-
-### Commits
-
-```
-scope: what you did
-```
-
-Lowercase, imperative mood ("add", not "added"), one change per commit.
-
-| Scope | Use for |
-|---|---|
-| `user_preferences` `product_search` `approval` `payment` | changes inside one step |
-| `setup` | graph, state, schemas, project structure |
-| `infra` | databases, Docker, deployment |
-| `test` | tests only |
-| `docs` | documentation |
-| `chore` | tooling, CI, dependencies, cleanup |
-
-Examples: `payment: block payments above limit`, `test: cover invalid approval answer`, `chore: install dependencies with uv in CI`.
-
-### Pull requests
-
-Work on a branch named after the scope (e.g. `user_preferences/agent-with-mock-tools`), open a PR with `Closes #N`, and merge once CI is green.
-
-## Stack
-
-Python 3.12 · LangGraph · LangChain · OpenRouter · Pydantic · FastAPI · PostgreSQL · Qdrant · Next.js · Docker · uv · pytest · ruff · mypy
+Tests use `TEST_DATABASE_URL` with temporary schemas and a scripted model. No API key is needed.
