@@ -95,3 +95,14 @@ class FakeSearcher:
         self.requests.append(request)
         offers = self.answers.pop(0) if self.answers else []
         return SearchResults(queries=[request.brief], offers=offers)
+
+
+class FakeEmbedder:
+    """Gives each text the vector chosen by the test, so the test decides which texts are close."""
+
+    def __init__(self, vectors: dict[str, list[float]]) -> None:
+        self.vectors = vectors
+        self.dimensions = len(next(iter(vectors.values())))
+
+    def embed(self, text: str) -> list[float]:
+        return self.vectors[text]
