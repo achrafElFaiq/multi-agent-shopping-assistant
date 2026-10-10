@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr
     database_url: SecretStr
     llm_model: str
+    searcher_url: str = "http://localhost:8001/"  # the search agent's A2A server
 
 
 def load_settings() -> Settings:

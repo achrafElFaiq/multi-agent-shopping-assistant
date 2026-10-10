@@ -4,12 +4,14 @@
         --limit 120 --currency EUR --deliver-by 2026-10-20
     Add --raw to also print the raw HTTP calls to the model.
 
-Needs OPENROUTER_API_KEY, LLM_MODEL and DATABASE_URL in .env.
-Seed example preferences with: uv run python -m backend.seed
+Needs OPENROUTER_API_KEY and LLM_MODEL in .env, and the search agent running in another
+terminal: uv run python -m backend.agents.searcher
+Preferences are mocks for now: the example ones of backend/seed.py, kept in memory.
 """
 
 import argparse
 import json
+import logging
 import time
 from datetime import date
 from decimal import Decimal
@@ -26,8 +28,11 @@ from langgraph.types import Command
 from backend.agents.shopping.graph import ShoppingGraph, build_graph
 from backend.agents.shopping.schemas import ShoppingRequest
 from backend.config.settings import load_settings
+from backend.core.adapters.a2a_searcher import A2ASearcher
+from backend.core.adapters.memory_preferences import InMemoryPreferencesRepository
+from backend.core.adapters.memory_recommendations import InMemoryRecommendations
 from backend.core.adapters.openrouter import make_chat_model
-from backend.core.adapters.postgres_preferences import PostgresPreferencesRepository
+from backend.seed import SEED_PREFERENCES
 
 BLUE, PURPLE, YELLOW, GREEN, RED, DIM, BOLD, RESET = (
     "\033[34m", "\033[35m", "\033[33m", "\033[32m", "\033[31m", "\033[2m", "\033[1m", "\033[0m"
@@ -123,10 +128,20 @@ def main() -> None:
     parser.add_argument("--raw", action="store_true", help="also print the full HTTP requests and responses")
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.WARNING, format=f"   {DIM}%(message)s{RESET}")
+    logging.getLogger("backend.core.adapters.memory_recommendations").setLevel(logging.INFO)  # the mock actions
+    logging.getLogger("backend.core.adapters.a2a_searcher").setLevel(logging.INFO)  # the A2A messages
+
     settings = load_settings()
     http_client = raw_http_client() if args.raw else None
-    repository = PostgresPreferencesRepository(settings.database_url.get_secret_value())
-    graph = build_graph(make_chat_model(settings, http_client), repository)
+    # Mock preferences for now. For PostgreSQL: PostgresPreferencesRepository(settings.database_url.get_secret_value())
+    repository = InMemoryPreferencesRepository(SEED_PREFERENCES)
+    graph = build_graph(
+        make_chat_model(settings, http_client),
+        repository,
+        A2ASearcher(settings.searcher_url),
+        InMemoryRecommendations(),
+    )
     tracer = Tracer()
     thread_id = str(uuid4())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [tracer]}
@@ -146,19 +161,18 @@ def main() -> None:
 
     while (state := graph.get_state(config)).interrupts:
         question = state.interrupts[0].value
-        answer: str | dict[str, str]
-        if question.get("type") == "preferences":
-            answer = input(f"{BOLD}{question['question']} {RESET}").strip()
-        else:
+        if question.get("type") == "recommendation":
             offer = question["offer"]
-            print(
-                f"   {offer['name']} at {offer['store']}: {BOLD}{offer['price']} {offer['currency']}{RESET}, "
-                f"delivered {offer['delivery_date']}"
-            )
-            print(f"   why: {question['reason']}\n")
+            options = ", ".join(f"{name} {value}" for name, value in offer["options"].items())
+            print(f"   {BOLD}#{question['number']} {offer['title']}{RESET} at {offer['store']}")
+            print(f"   {BOLD}{offer['price']} {offer['currency']}{RESET}" + (f"  ({options})" if options else ""))
+            print(f"   {offer['url']}")
+            print(f"   {GREEN}{question['pitch']}{RESET}\n")
             if question.get("error"):
-                print(question["error"])
-            answer = {"action": input(f"{BOLD}Approve or cancel? [approve/cancel] {RESET}").strip().lower()}
+                print(f"   {RED}{question['error']}{RESET}")
+            answer = input(f"{BOLD}Do you want it? [yes/no] {RESET}").strip()
+        else:  # a question from the preferences agent, or "why not?" after a no
+            answer = input(f"{BOLD}{question['question']} {RESET}").strip()
         print()
         run_until_pause(graph, Command(resume=answer), config)
 
