@@ -11,11 +11,11 @@ from backend.agents.shopping.state import ShoppingState
 
 
 def pay(state: ShoppingState) -> dict[str, PaymentResult]:
-    offer = state["recommendation"].offer
-
     # Rule 1: never pay without the user's approval.
     if state["decision"].action != "approve":
         return {"payment": PaymentResult(status="cancelled")}
+
+    offer = state["recommendation"].offer
 
     # Rule 2: never go over the spending limit.
     if offer.price > state["request"].spending_limit:

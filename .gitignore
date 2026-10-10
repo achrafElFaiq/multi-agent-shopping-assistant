@@ -9,3 +9,6 @@ build/
 *.egg-info/
 building-plan.md
 Screenshot 2026-09-25 at 20.25.27.png
+
+# Benchmark recordings: raw catalog answers, too big for git. Recreate with: uv run python -m tests.benchmark.run record
+tests/benchmark/recordings/

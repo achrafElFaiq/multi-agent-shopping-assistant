@@ -34,24 +34,24 @@ class ProductOffer(BaseModel):
     price: Decimal = Field(gt=0)
     currency: str = "EUR"
     in_stock: bool
-    delivery_date: date
+    delivery_date: date | None = None  # None until the store gives one
 
 
 class Recommendation(BaseModel):
-    """Chapter 2 (Search) output: the best offer and why it was picked."""
+    """Chapter 2 output: the offer the shopper accepted and why it was recommended."""
 
     offer: ProductOffer
     reason: str
 
 
 class ApprovalDecision(BaseModel):
-    """Chapter 3 (Approval) output: what the user answered."""
+    """Chapter 2 output: whether the shopper accepted an offer."""
 
     action: Literal["approve", "cancel"]
 
 
 class PaymentResult(BaseModel):
-    """Chapter 4 (Payment) output."""
+    """Chapter 3 (Payment) output."""
 
     status: Literal["paid", "cancelled", "blocked"]
     amount: Decimal | None = None
