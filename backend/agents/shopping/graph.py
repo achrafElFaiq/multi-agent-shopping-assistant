@@ -32,7 +32,7 @@ def build_graph(
     to recommendations are kept (real ones in the app, fakes in tests)."""
     graph = StateGraph(ShoppingState, input_schema=ShoppingState, output_schema=ShoppingState)
 
-    graph.add_node("user_preferences", make_user_preferences_node(model, repository))
+    graph.add_node("user_preferences", make_user_preferences_node(model, repository, recommendations))
     graph.add_node("recommendation", make_recommendation_node(model, searcher, recommendations))
     graph.add_node("payment", pay)
 

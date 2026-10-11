@@ -1,7 +1,7 @@
 """Preferences tools and agent behavior against isolated PostgreSQL data."""
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,9 +12,11 @@ from backend.agents.shopping.nodes.user_preferences import make_user_preferences
 from backend.agents.shopping.schemas import ShoppingRequest, UserPreferences
 from backend.agents.shopping.state import ShoppingState
 from backend.agents.shopping.tools.user_preferences import make_preference_tools
+from backend.core.adapters.memory_recommendations import InMemoryRecommendations
 from backend.core.adapters.postgres_preferences import PostgresPreferencesRepository
+from backend.core.models.recommendations import RecommendationRecord
 from backend.core.ports.preferences import Budget, Preferences
-from tests.fakes import FakeChatModel
+from tests.fakes import FakeChatModel, make_offer
 
 ANSWER = UserPreferences(
     category="shoes",
@@ -46,6 +48,18 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
     stored = repository.update_preferences(
         "shoes", Preferences(attributes={"size": "43 EU"}, likes=["Asics"], usual_budget=ANSWER.usual_budget)
     )
+    history = InMemoryRecommendations()
+    history.save(
+        RecommendationRecord(
+            query="running shoes",
+            category="shoes",
+            offer=make_offer(),
+            pitch="Light and cushioned.",
+            accepted=False,
+            reason="too flashy",
+            decided_at=datetime(2026, 10, 1, tzinfo=UTC),
+        )
+    )
     model = FakeChatModel(
         messages=iter(
             [
@@ -55,7 +69,7 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
         )
     )
 
-    result = make_user_preferences_node(model, repository)(make_state())
+    result = make_user_preferences_node(model, repository, history)(make_state())
 
     context = json.loads(model.seen_inputs[0][-1].content)
     assert context["categories"] == ["general", "shoes"]
@@ -64,6 +78,18 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
     assert context["request"]["spending_limit"] == "120"
     assert context["request"]["currency"] == "EUR"
     assert context["request"]["deliver_by"] == "2026-10-20"
+    assert context["history"] == [
+        {
+            "request": "running shoes",
+            "product": "Nike Pegasus 42",
+            "store": "Pro:Direct",
+            "price": "99.90 EUR",
+            "options": {"Size": "43"},
+            "accepted": False,
+            "reason": "too flashy",
+            "date": "2026-10-01",
+        }
+    ]
     observation = model.seen_inputs[1][-1]
     assert isinstance(observation, ToolMessage)
     assert json.loads(str(observation.content))["preferences"]["attributes"] == {"size": "43 EU"}
@@ -119,7 +145,7 @@ def test_invalid_submission_is_returned_to_model_for_correction(repository: Post
         )
     )
 
-    result = make_user_preferences_node(model, repository)(make_state())
+    result = make_user_preferences_node(model, repository, InMemoryRecommendations())(make_state())
 
     observation = model.seen_inputs[1][-1]
     assert isinstance(observation, ToolMessage)
