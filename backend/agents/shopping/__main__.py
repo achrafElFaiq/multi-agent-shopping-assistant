@@ -172,6 +172,8 @@ def main() -> None:
                 print(f"   {RED}{question['error']}{RESET}")
             answer = input(f"{BOLD}Do you want it? [yes/no] {RESET}").strip()
         else:  # a question from the preferences agent, or "why not?" after a no
+            if question.get("error"):
+                print(f"   {RED}{question['error']}{RESET}")
             answer = input(f"{BOLD}{question['question']} {RESET}").strip()
         print()
         run_until_pause(graph, Command(resume=answer), config)

@@ -16,7 +16,7 @@ class InMemoryRecommendations:
         if record.accepted:
             logger.info("[mock] saved: accepted %r from %s", record.offer.title, record.offer.seller.name)
         else:
-            logger.info("[mock] saved: rejected %r, reason: %r", record.offer.title, record.reason or "none given")
+            logger.info("[mock] saved: rejected %r, reason: %r", record.offer.title, record.reason)
 
     def find_similar(self, query: str, limit: int = 5) -> list[RecommendationRecord]:
         """Does not compare meanings: returns the latest answers, newest first, whatever the request."""
