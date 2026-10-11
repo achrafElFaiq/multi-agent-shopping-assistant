@@ -1,5 +1,7 @@
 """Answers to recommendations stored in PostgreSQL, each with a vector (pgvector) to find those close to a request."""
 
+import logging
+
 import psycopg
 from psycopg import sql
 from psycopg.rows import class_row
@@ -9,6 +11,8 @@ from backend.core.models.recommendations import RecommendationRecord
 from backend.core.ports.embeddings import Embedder
 
 MAX_DISTANCE = 0.6  # cosine distance: 0 means the same thing, 1 unrelated. To be tuned on real requests.
+
+logger = logging.getLogger(__name__)
 
 
 class PostgresRecommendations:
@@ -53,11 +57,15 @@ class PostgresRecommendations:
                     str(vector),
                 ),
             )
+        if record.accepted:
+            logger.info("saved: accepted %r from %s", record.offer.title, record.offer.seller.name)
+        else:
+            logger.info("saved: rejected %r, reason: %r", record.offer.title, record.reason)
 
     def find_similar(self, query: str, limit: int = 5) -> list[RecommendationRecord]:
         vector = str(self._embedder.embed(query))
         with psycopg.connect(self._database_url, row_factory=class_row(RecommendationRecord)) as connection:
-            return connection.execute(
+            found = connection.execute(
                 """
                 SELECT query, category, offer, pitch, accepted, reason, decided_at
                 FROM recommendations
@@ -67,3 +75,6 @@ class PostgresRecommendations:
                 """,
                 {"vector": vector, "max_distance": MAX_DISTANCE, "limit": limit},
             ).fetchall()
+        answers = [f"{r.offer.title} ({'yes' if r.accepted else 'no: ' + r.reason})" for r in found]
+        logger.info("history for %r: %s", query, "; ".join(answers) or "nothing close")
+        return found

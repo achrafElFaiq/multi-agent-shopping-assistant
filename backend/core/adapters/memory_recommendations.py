@@ -1,4 +1,4 @@
-"""Mock RecommendationRepository: keeps the answers in memory and logs them. A PostgreSQL table replaces it later."""
+"""Mock RecommendationRepository for tests: keeps the answers in memory and logs them. The app uses PostgreSQL."""
 
 import logging
 

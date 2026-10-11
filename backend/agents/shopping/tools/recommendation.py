@@ -92,7 +92,7 @@ def make_recommendation_tools(
         accepted = ask_yes_or_no(offer, pitch, len(shown) + 1)
         reason = "" if accepted else ask_reason()
 
-        # The action: save the answer (in memory for now).
+        # The action: save the answer, which history learns from.
         repository.save(
             RecommendationRecord(
                 query=request.query,
