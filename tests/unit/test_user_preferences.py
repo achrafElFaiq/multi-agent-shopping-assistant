@@ -64,6 +64,7 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
         messages=iter(
             [
                 tool_reply("get_preferences", "read", category="shoes"),
+                tool_reply("search_history", "history", query="running shoes"),
                 tool_reply("submit_preferences", "submit", **ANSWER.model_dump(mode="json")),
             ]
         )
@@ -78,7 +79,12 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
     assert context["request"]["spending_limit"] == "120"
     assert context["request"]["currency"] == "EUR"
     assert context["request"]["deliver_by"] == "2026-10-20"
-    assert context["history"] == [
+    observation = model.seen_inputs[1][-1]
+    assert isinstance(observation, ToolMessage)
+    assert json.loads(str(observation.content))["preferences"]["attributes"] == {"size": "43 EU"}
+    past_offers = model.seen_inputs[2][-1]
+    assert isinstance(past_offers, ToolMessage)
+    assert json.loads(str(past_offers.content)) == [
         {
             "request": "running shoes",
             "product": "Nike Pegasus 42",
@@ -90,11 +96,9 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
             "date": "2026-10-01",
         }
     ]
-    observation = model.seen_inputs[1][-1]
-    assert isinstance(observation, ToolMessage)
-    assert json.loads(str(observation.content))["preferences"]["attributes"] == {"size": "43 EU"}
+    assert model.tool_choices[:2] == ["get_preferences", "search_history"]
     assert result["preferences"] == ANSWER
-    assert len(model.seen_inputs) == 2
+    assert len(model.seen_inputs) == 3
     assert repository.get_preferences("shoes") == stored
 
 
@@ -109,7 +113,7 @@ def test_partial_update_preserves_unrelated_preferences(repository: PostgresPref
             usual_budget=ANSWER.usual_budget,
         ),
     )
-    tools = {tool.name: tool for tool in make_preference_tools(repository)}
+    tools = {tool.name: tool for tool in make_preference_tools(repository, InMemoryRecommendations())}
 
     tools["update_preferences"].invoke(
         {
