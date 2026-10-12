@@ -4,9 +4,10 @@
         --limit 120 --currency EUR --deliver-by 2026-10-20
     Add --raw to also print the raw HTTP calls to the model.
 
-Needs OPENROUTER_API_KEY and LLM_MODEL in .env, and the search agent running in another
-terminal: uv run python -m backend.agents.searcher
+Needs OPENROUTER_API_KEY, LLM_MODEL and DATABASE_URL in .env, PostgreSQL with pgvector running, and the search
+agent running in another terminal: uv run python -m backend.agents.searcher
 Preferences are mocks for now: the example ones of backend/seed.py, kept in memory.
+Answers to recommendations are kept in PostgreSQL: the next requests learn from them.
 """
 
 import argparse
@@ -29,9 +30,10 @@ from backend.agents.shopping.graph import ShoppingGraph, build_graph
 from backend.agents.shopping.schemas import ShoppingRequest
 from backend.config.settings import load_settings
 from backend.core.adapters.a2a_searcher import A2ASearcher
+from backend.core.adapters.fastembed_embedder import FastEmbedEmbedder
 from backend.core.adapters.memory_preferences import InMemoryPreferencesRepository
-from backend.core.adapters.memory_recommendations import InMemoryRecommendations
 from backend.core.adapters.openrouter import make_chat_model
+from backend.core.adapters.postgres_recommendations import PostgresRecommendations
 from backend.seed import SEED_PREFERENCES
 
 BLUE, PURPLE, YELLOW, GREEN, RED, DIM, BOLD, RESET = (
@@ -129,7 +131,7 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format=f"   {DIM}%(message)s{RESET}")
-    logging.getLogger("backend.core.adapters.memory_recommendations").setLevel(logging.INFO)  # the mock actions
+    logging.getLogger("backend.core.adapters.postgres_recommendations").setLevel(logging.INFO)  # answers and history
     logging.getLogger("backend.core.adapters.a2a_searcher").setLevel(logging.INFO)  # the A2A messages
 
     settings = load_settings()
@@ -140,7 +142,7 @@ def main() -> None:
         make_chat_model(settings, http_client),
         repository,
         A2ASearcher(settings.searcher_url),
-        InMemoryRecommendations(),
+        PostgresRecommendations(settings.database_url.get_secret_value(), FastEmbedEmbedder()),
     )
     tracer = Tracer()
     thread_id = str(uuid4())
@@ -172,6 +174,8 @@ def main() -> None:
                 print(f"   {RED}{question['error']}{RESET}")
             answer = input(f"{BOLD}Do you want it? [yes/no] {RESET}").strip()
         else:  # a question from the preferences agent, or "why not?" after a no
+            if question.get("error"):
+                print(f"   {RED}{question['error']}{RESET}")
             answer = input(f"{BOLD}{question['question']} {RESET}").strip()
         print()
         run_until_pause(graph, Command(resume=answer), config)

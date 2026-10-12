@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 PREFERENCES: list[tuple[str, dict[str, Any]]] = [
     ("get_preferences", {"category": "shoes"}),
+    ("search_history", {"query": "running shoes"}),
     ("submit_preferences", {"category": "shoes", "summary": "Likes Asics.", "likes": ["Asics"]}),
 ]
 RECOMMEND_FIRST: list[tuple[str, dict[str, Any]]] = [
@@ -121,6 +122,7 @@ def test_new_category_asks_saves_answer_and_continues_to_recommendation(
 ) -> None:
     model = scripted(
         ("get_preferences", {"category": "coffee"}),
+        ("search_history", {"query": "specialty coffee"}),
         ("ask_user", {"question": "Quelle torréfaction préfères-tu ?"}),
         ("update_preferences", {"category": "coffee", "changes": {"likes": ["light roast"]}}),
         ("submit_preferences", {"category": "coffee", "summary": "Prefers light roast.", "likes": ["light roast"]}),
@@ -137,13 +139,13 @@ def test_new_category_asks_saves_answer_and_continues_to_recommendation(
     paused = graph.get_state(config)
     assert paused.next == ("user_preferences",)
     assert paused.interrupts[0].value == {"type": "preferences", "question": "Quelle torréfaction préfères-tu ?"}
-    assert model.tool_choices == ["get_preferences", "ask_user"]
+    assert model.tool_choices == ["get_preferences", "search_history", "ask_user"]
     assert repository.get_preferences("coffee") is None
 
     result = graph.invoke(Command(resume="Je préfère une torréfaction légère"), config)
 
-    assert model.tool_choices[:4] == ["get_preferences", "ask_user", "required", "required"]  # then the recommender
-    assert model.seen_inputs[2][-1].content == "Je préfère une torréfaction légère"
+    assert model.tool_choices[:5] == ["get_preferences", "search_history", "ask_user", "required", "required"]
+    assert model.seen_inputs[3][-1].content == "Je préfère une torréfaction légère"
     stored = repository.get_preferences("coffee")
     assert stored is not None
     assert stored.preferences.likes == ["light roast"]

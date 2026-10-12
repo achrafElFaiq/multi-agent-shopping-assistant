@@ -90,9 +90,9 @@ def make_recommendation_tools(
 
         offer = offers[offer_number - 1]
         accepted = ask_yes_or_no(offer, pitch, len(shown) + 1)
-        reason = "" if accepted else str(interrupt({"type": "reason", "question": "Why not this one?"})).strip()
+        reason = "" if accepted else ask_reason()
 
-        # The action: save the answer (in memory for now).
+        # The action: save the answer, which history learns from.
         repository.save(
             RecommendationRecord(
                 query=request.query,
@@ -107,10 +107,9 @@ def make_recommendation_tools(
         answer = {"offer_number": offer_number, "pitch": pitch, "accepted": accepted, "reason": reason}
         if accepted:
             return "The shopper accepted this offer.", answer
-        said = f" Their reason: {reason}" if reason else " They gave no reason."
         return (
-            f"The shopper said no.{said} Present a better offer already found, or ask the search agent to find "
-            "better, telling it why this one was refused. Or call no_more_offers.",
+            f'The shopper said no. Their reason: "{reason}". Present a better offer already found, or ask the search '
+            "agent to find better, telling it why this one was refused. Or call no_more_offers.",
             answer,
         )
 
@@ -146,6 +145,16 @@ def ask_yes_or_no(offer: Offer, pitch: str, number: int) -> bool:
         if answer in NO:
             return False
         question = {**question, "error": "Please answer yes or no."}
+
+
+def ask_reason() -> str:
+    """Pause the graph to ask why the shopper said no, until they give a reason: it is what history learns from."""
+    question = {"type": "reason", "question": "Why not this one?"}
+    while True:
+        reason = str(interrupt(question)).strip()
+        if reason:
+            return reason
+        question = {**question, "error": "Please say why: it helps find a better offer."}
 
 
 def describe(number: int, offer: Offer) -> str:

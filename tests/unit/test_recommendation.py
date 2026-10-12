@@ -126,7 +126,25 @@ def test_nothing_accepted_means_no_payment() -> None:
     graph = start(model, FakeSearcher([PLAIN]), InMemoryRecommendations())
 
     graph.invoke(Command(resume="no"), CONFIG)
-    result = graph.invoke(Command(resume=""), CONFIG)  # no reason given
+    result = graph.invoke(Command(resume="too expensive"), CONFIG)
 
     assert result["decision"].action == "cancel"
     assert "recommendation" not in result
+
+
+def test_a_no_without_a_reason_is_asked_again() -> None:
+    model = script(
+        ("ask_searcher", {"brief": "Running shoes"}),
+        ("present_offer", {"offer_number": 1, "pitch": "."}),
+        ("no_more_offers", {}),
+    )
+    saved = InMemoryRecommendations()
+    graph = start(model, FakeSearcher([PLAIN]), saved)
+    graph.invoke(Command(resume="no"), CONFIG)
+
+    graph.invoke(Command(resume="  "), CONFIG)
+
+    assert question(graph)["error"] == "Please say why: it helps find a better offer."
+    assert saved.records == []
+    graph.invoke(Command(resume="too expensive"), CONFIG)
+    assert [record.reason for record in saved.records] == ["too expensive"]

@@ -1,4 +1,4 @@
-"""Mock RecommendationRepository: keeps the answers in memory and logs them. A PostgreSQL table replaces it later."""
+"""Mock RecommendationRepository for tests: keeps the answers in memory and logs them. The app uses PostgreSQL."""
 
 import logging
 
@@ -16,4 +16,8 @@ class InMemoryRecommendations:
         if record.accepted:
             logger.info("[mock] saved: accepted %r from %s", record.offer.title, record.offer.seller.name)
         else:
-            logger.info("[mock] saved: rejected %r, reason: %r", record.offer.title, record.reason or "none given")
+            logger.info("[mock] saved: rejected %r, reason: %r", record.offer.title, record.reason)
+
+    def find_similar(self, query: str, limit: int = 5) -> list[RecommendationRecord]:
+        """Does not compare meanings: returns the latest answers, newest first, whatever the request."""
+        return self.records[::-1][:limit]

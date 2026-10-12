@@ -13,5 +13,5 @@ class RecommendationRecord(BaseModel):
     offer: Offer
     pitch: str  # why the agent thought it fits
     accepted: bool
-    reason: str = ""  # why the shopper said no, in their words; empty if they gave none
+    reason: str = ""  # why the shopper said no, in their words; empty when accepted
     decided_at: datetime
