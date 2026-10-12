@@ -5,7 +5,7 @@
     Add --raw to also print the raw HTTP calls to the model.
 
 Needs OPENROUTER_API_KEY, LLM_MODEL and DATABASE_URL in .env, PostgreSQL with pgvector running, and the search
-agent running in another terminal: uv run python -m backend.agents.searcher
+agent running in another terminal: uv run python -m backend.agents.product_finder_agent
 Preferences are mocks for now: the example ones of backend/seed.py, kept in memory.
 Answers to recommendations are kept in PostgreSQL: the next requests learn from them.
 """

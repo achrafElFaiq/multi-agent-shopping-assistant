@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: SecretStr
     llm_model: str
     searcher_url: str = "http://localhost:8001/"  # the search agent's A2A server
+    preferences_url: str = "http://localhost:8002/"  # the user preferences agent's A2A server
 
 
 def load_settings() -> Settings:

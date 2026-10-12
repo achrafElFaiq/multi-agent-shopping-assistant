@@ -1,4 +1,4 @@
-"""Start the search agent as an A2A server: uv run python -m backend.agents.searcher
+"""Start the search agent as an A2A server: uv run python -m backend.agents.product_finder_agent
 
 Needs OPENROUTER_API_KEY, LLM_MODEL and DATABASE_URL in .env (the model is the one the search agent uses).
 Its Agent Card is then at http://localhost:8001/.well-known/agent-card.json
@@ -9,7 +9,7 @@ import logging
 
 import uvicorn
 
-from backend.agents.searcher.server import create_app
+from backend.agents.product_finder_agent.server import create_app
 from backend.config.settings import load_settings
 from backend.core.adapters.openrouter import make_chat_model
 from backend.core.adapters.shopify_catalog import ShopifyGlobalCatalog

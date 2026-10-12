@@ -6,7 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
 
 from backend.agents.agent_loop import run_tool_agent
-from backend.agents.searcher.tools import MAX_SEARCHES, make_search_tools
+from backend.agents.product_finder_agent.tools import MAX_SEARCHES, make_search_tools
 from backend.core.models.search import SearchRequest, SearchResults
 from backend.core.ports.catalog import ProductCatalog
 from backend.core.services.product_finder import MIN_OFFERS, OfferPool

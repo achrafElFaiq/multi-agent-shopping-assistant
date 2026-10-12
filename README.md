@@ -1,14 +1,19 @@
 # AI Shopping Assistant
 
-LangGraph shopping assistant with an OpenRouter model and PostgreSQL preferences.
-One user, with preferences stored by category. A recommendation agent works with a search agent over A2A:
-the search agent searches every Shopify store at once (Shopify Global Catalog, no API key), the recommendation
-agent presents the offers one by one and, when the user says no, asks it to find better, telling it why.
-Saving the answers and payment are currently mocks.
+Three LangGraph agents talking over A2A, for one user with preferences stored by category:
+- **master** (`backend/agents/master_agent`): talks to the user, delegates, presents offers one by one, pays.
+- **user preferences** (`backend/agents/user_preferences_agent`, A2A on :8002): reads the stored preferences
+  and past answers, asks the user when something essential is missing, saves lasting preferences.
+- **product finder** (`backend/agents/product_finder_agent`, A2A on :8001): searches every Shopify store at once
+  (Shopify Global Catalog, no API key).
+
+When the user says no, the master asks why and asks the product finder to find better, telling it why.
+Answers are kept in PostgreSQL (pgvector). Preferences and payment are currently mocks.
+The previous single-graph version is still in `backend/agents/shopping`.
 
 ## Launch
 
-Requires [uv](https://docs.astral.sh/uv/) and a running PostgreSQL server. Run commands from the repository root.
+Requires [uv](https://docs.astral.sh/uv/) and a running PostgreSQL server with pgvector. Run commands from the repository root.
 
 1. Install dependencies and configure `.env`:
 
@@ -22,25 +27,24 @@ Requires [uv](https://docs.astral.sh/uv/) and a running PostgreSQL server. Run c
 2. Create a database on your PostgreSQL server and set `DATABASE_URL` in `.env`.
    Replace the example credentials with your database name, username, and password.
 
-3. Start the search agent (its A2A server) in one terminal:
+3. Start the two A2A agents, each in its own terminal:
 
    ```bash
-   uv run python -m backend.agents.searcher
+   uv run python -m backend.agents.product_finder_agent     # :8001
+   uv run python -m backend.agents.user_preferences_agent   # :8002
    ```
 
-   Its Agent Card is at http://localhost:8001/.well-known/agent-card.json
+   Their Agent Cards are at http://localhost:8001/.well-known/agent-card.json and
+   http://localhost:8002/.well-known/agent-card.json
 
-4. Launch the shopping agent in another terminal:
+4. Launch the master in a third terminal:
 
    ```bash
-   uv run python -m backend.agents.shopping "running shoes" \
-     --limit 120 --currency EUR --deliver-by 2026-10-20
+   uv run python -m backend.agents.master_agent "running shoes" --limit 120 --currency EUR
    ```
 
-   It uses the example preferences of `backend/seed.py`, kept in memory for now, so steps 2 and
-   `uv run python -m backend.seed` are only needed for PostgreSQL. Answer `yes` or `no` to each recommendation,
-   and say why after a no. Add `--raw` to see the HTTP request and
-   response bodies.
+   Preferences are the example ones of `backend/seed.py`, kept in memory for now. Answer the preferences agent's
+   questions, then `yes` or `no` to each offer, and say why after a no.
 
 To try the catalog search alone, without a model or a key:
 `uv run python -m backend.scripts.find_products "nike running shoes" --max-price 120 --size 43`
