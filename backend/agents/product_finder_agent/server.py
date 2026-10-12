@@ -17,7 +17,7 @@ from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill, 
 from langchain_core.language_models import BaseChatModel
 from starlette.applications import Starlette
 
-from backend.agents.searcher.agent import find_offers
+from backend.agents.product_finder_agent.agent import find_offers
 from backend.core.models.search import SearchRequest
 from backend.core.ports.catalog import ProductCatalog
 

@@ -6,8 +6,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.messages.tool import ToolCall
 
-from backend.agents.searcher.agent import find_offers
-from backend.agents.searcher.tools import MAX_SEARCHES
+from backend.agents.product_finder_agent.agent import find_offers
+from backend.agents.product_finder_agent.tools import MAX_SEARCHES
 from backend.core.models.products import CatalogPage
 from backend.core.models.search import SearchRequest
 from tests.fakes import FakeCatalog, FakeChatModel, catalog_with, make_offer

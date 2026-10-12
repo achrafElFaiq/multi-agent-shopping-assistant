@@ -6,7 +6,7 @@ import httpx
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolCall
 
-from backend.agents.searcher.server import create_app
+from backend.agents.product_finder_agent.server import create_app
 from backend.core.adapters.a2a_searcher import A2ASearcher
 from backend.core.models.search import SearchRequest
 from tests.fakes import FakeChatModel, catalog_with, make_offer
