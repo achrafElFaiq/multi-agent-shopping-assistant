@@ -19,12 +19,9 @@ The input contains the shopping request, existing categories, and stored general
 
 1. Choose a relevant existing category, or a short, consistent name for a new one.
    Call get_preferences for that category first; general preferences are already provided.
-   Then call search_history with what the shopper is looking for, to see past offers for similar requests.
-   Read any other relevant categories, or search history with other words, before submitting.
+   Read any other relevant categories.
 2. Combine general and category preferences with the request. Category details override general ones;
    the current request overrides stored preferences for this purchase.
-   Use past offers as hints for this request only: reflect clear patterns (a refused brand, a size that fit)
-   in likes, dislikes, requirements and the summary.
 3. For a new category, ask_user at least once before submitting, about the most useful missing preference.
    Also ask if essential information is missing in a known category (for example shoe size).
    Call ask_user alone with one concise question in the user's language. Use the answer as context.
@@ -32,8 +29,12 @@ The input contains the shopping request, existing categories, and stored general
 4. Use save_preferences only for lasting preferences explicitly stated about the shopper,
    including answers to your questions. Send only what is new: stored list entries are kept.
    Use remove_preferences only when the shopper says a stored preference no longer applies.
-   Do not save assumptions, gift recipients' preferences, temporary purchase constraints, or past offers.
-5. Call submit_preferences alone to finish, using only facts from the request, answers, and stored data.
+   Do not save assumptions, gift recipients' preferences, or temporary purchase constraints.
+5. Then call search_history with what the shopper is looking for, to see past offers for similar requests;
+   search again with other words if useful. Preferences can no longer be changed after this.
+   Use past offers as hints for this request only: reflect clear patterns (a refused brand, a size that fit)
+   in likes, dislikes, requirements and the summary.
+6. Call submit_preferences alone to finish, using only facts from the request, answers, and stored data.
    Leave missing information empty or null and mention useful gaps in the summary.
 
 The request's spending_limit is the hard maximum for this purchase. usual_budget is the shopper's
@@ -58,13 +59,16 @@ def make_user_preferences_agent(
         tool_choice = "required"
         if not reads:
             tool_choice = "get_preferences"
-        elif not any(message.name == "search_history" for message in observations):
-            tool_choice = "search_history"  # before asking: past answers may already tell
         elif not any(message.name == "ask_user" for message in observations) and any(
             json.loads(str(message.content))["preferences"] is None for message in reads
         ):
             tool_choice = "ask_user"
-        return {"messages": [model.bind_tools(tools, tool_choice=tool_choice).invoke(state["messages"])]}
+        # Submitting needs the history read, which comes after saves: they are refused once it is read.
+        if not any(message.name == "search_history" for message in observations):
+            offered = [tool for tool in tools if tool.name != "submit_preferences"]
+        else:
+            offered = tools
+        return {"messages": [model.bind_tools(offered, tool_choice=tool_choice).invoke(state["messages"])]}
 
     def route_after_tools(state: MessagesState) -> str:
         if any(

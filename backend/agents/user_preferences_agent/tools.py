@@ -1,14 +1,21 @@
 """Tools for reading, asking about, and updating a single user's category preferences, and for reading past offers."""
 
-from typing import Any
+from typing import Annotated, Any
 
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, tool
+from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
 
 from backend.core.models.preferences import UserPreferences
 from backend.core.models.recommendations import RecommendationRecord
 from backend.core.ports.preferences import PreferenceRemoval, Preferences, PreferencesRepository
 from backend.core.ports.recommendations import RecommendationRepository
+
+State = Annotated[dict[str, Any], InjectedState]  # the agent's messages, given by the system, not the model
+
+# Past offers are hints for one request: nothing read from them is saved, whatever the model does.
+AFTER_HISTORY = "Preferences can't be changed after reading past offers: use them for this request only."
 
 
 def make_preference_tools(
@@ -37,19 +44,23 @@ def make_preference_tools(
         return interrupt({"type": "preferences", "question": question})
 
     @tool
-    def save_preferences(category: str, changes: Preferences) -> dict[str, Any]:
+    def save_preferences(category: str, changes: Preferences, state: State) -> dict[str, Any] | str:
         """Save lasting preferences explicitly stated by the user. Send only what changes.
 
         List items are added to the stored ones; attributes and the budget are set. Nothing is removed.
         """
+        if history_read(state):
+            return AFTER_HISTORY
         return repository.save_preferences(category, changes).model_dump(mode="json")
 
     @tool
-    def remove_preferences(category: str, removal: PreferenceRemoval) -> dict[str, Any]:
+    def remove_preferences(category: str, removal: PreferenceRemoval, state: State) -> dict[str, Any] | str:
         """Remove preferences the user says no longer apply: attribute keys, list items, or the budget.
 
         Only what is named is removed.
         """
+        if history_read(state):
+            return AFTER_HISTORY
         row = repository.remove_preferences(category, removal)
         return row.model_dump(mode="json") if row is not None else {"category": category, "preferences": None}
 
@@ -64,6 +75,10 @@ def make_preference_tools(
     for preference_tool in tools:
         preference_tool.handle_validation_error = lambda error: f"Invalid preferences: {error}"
     return tools
+
+
+def history_read(state: dict[str, Any]) -> bool:
+    return any(isinstance(message, ToolMessage) and message.name == "search_history" for message in state["messages"])
 
 
 def past_answer(record: RecommendationRecord) -> dict[str, Any]:

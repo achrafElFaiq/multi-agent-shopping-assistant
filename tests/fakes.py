@@ -19,6 +19,7 @@ class FakeChatModel(GenericFakeChatModel):
 
     seen_inputs: list[Any] = []
     tool_choices: list[str | None] = []
+    offered: list[list[str]] = []  # the names of the tools offered at each call
 
     def invoke(
         self,
@@ -39,6 +40,7 @@ class FakeChatModel(GenericFakeChatModel):
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
         self.tool_choices.append(tool_choice)
+        self.offered.append([tool.name for tool in tools if isinstance(tool, BaseTool)])
         return self
 
 
