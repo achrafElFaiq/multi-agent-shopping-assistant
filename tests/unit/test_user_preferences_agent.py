@@ -61,22 +61,26 @@ def test_uses_history_for_the_request_but_saves_nothing_from_it() -> None:
     assert "after reading past offers" in str(refused.content)
 
 
-def test_saves_before_reading_history_and_submits_only_after() -> None:
+def test_past_offers_come_only_after_saves_and_a_first_submission() -> None:
     preferences = InMemoryPreferencesRepository({"shoes": Preferences(dislikes=["narrow fit"])})
     model = script(
         ("get_preferences", {"category": "shoes"}),
         ("save_preferences", {"category": "shoes", "changes": {"attributes": {"gender": "men's"}}}),
+        ("submit_preferences", ANSWER),
         ("search_history", {"query": "trail running shoes"}),
         ("submit_preferences", ANSWER),
     )
 
-    make_user_preferences_agent(model, preferences, InMemoryRecommendations())(REQUEST)
+    answer = make_user_preferences_agent(model, preferences, InMemoryRecommendations())(REQUEST)
 
+    assert answer.category == "shoes"
     stored = preferences.get_preferences("shoes")
     assert stored is not None and stored.preferences.attributes == {"gender": "men's"}
     assert stored.preferences.dislikes == ["narrow fit"]
-    assert all("submit_preferences" not in names for names in model.offered[:3])  # not before history is read
-    assert "submit_preferences" in model.offered[3]
+    assert all("search_history" not in names for names in model.offered[:3])  # not before the first submission
+    first = next(m for m in model.seen_inputs[3] if isinstance(m, ToolMessage) and m.name == "submit_preferences")
+    assert "Read past offers first" in str(first.content)
+    assert model.tool_choices[3] == "search_history"
 
 
 def test_stops_when_nothing_is_submitted() -> None:

@@ -30,12 +30,12 @@ The input contains the shopping request, existing categories, and stored general
    including answers to your questions. Send only what is new: stored list entries are kept.
    Use remove_preferences only when the shopper says a stored preference no longer applies.
    Do not save assumptions, gift recipients' preferences, or temporary purchase constraints.
-5. Then call search_history with what the shopper is looking for, to see past offers for similar requests;
-   search again with other words if useful. Preferences can no longer be changed after this.
-   Use past offers as hints for this request only: reflect clear patterns (a refused brand, a size that fit)
-   in likes, dislikes, requirements and the summary.
-6. Call submit_preferences alone to finish, using only facts from the request, answers, and stored data.
+5. Call submit_preferences alone when done, using only facts from the request, answers, and stored data.
    Leave missing information empty or null and mention useful gaps in the summary.
+6. The first submission asks you to read past offers: call search_history with what the shopper is looking for,
+   and search again with other words if useful. Preferences can no longer be changed after this.
+   Use past offers as hints for this request only: reflect clear patterns (a refused brand, a size that fit)
+   in likes, dislikes, requirements and the summary, then submit again.
 
 The request's spending_limit is the hard maximum for this purchase. usual_budget is the shopper's
 stored usual spending, including its currency; do not replace it with the purchase limit.
@@ -56,6 +56,8 @@ def make_user_preferences_agent(
             message for message in state["messages"] if isinstance(message, ToolMessage) and message.status == "success"
         ]
         reads = [message for message in observations if message.name == "get_preferences"]
+        searched = any(message.name == "search_history" for message in observations)
+        submitted = any(message.name == "submit_preferences" for message in observations)  # refused: history unread
         tool_choice = "required"
         if not reads:
             tool_choice = "get_preferences"
@@ -63,11 +65,10 @@ def make_user_preferences_agent(
             json.loads(str(message.content))["preferences"] is None for message in reads
         ):
             tool_choice = "ask_user"
-        # Submitting needs the history read, which comes after saves: they are refused once it is read.
-        if not any(message.name == "search_history" for message in observations):
-            offered = [tool for tool in tools if tool.name != "submit_preferences"]
-        else:
-            offered = tools
+        elif submitted and not searched:
+            tool_choice = "search_history"
+        # Past offers come only once the model says it is done, so its saves are made before: they are refused after.
+        offered = tools if searched or submitted else [tool for tool in tools if tool.name != "search_history"]
         return {"messages": [model.bind_tools(offered, tool_choice=tool_choice).invoke(state["messages"])]}
 
     def route_after_tools(state: MessagesState) -> str:
@@ -95,7 +96,7 @@ def make_user_preferences_agent(
         }
         result = agent.invoke(
             {"messages": [SystemMessage(SYSTEM_PROMPT), HumanMessage(json.dumps(context, ensure_ascii=False))]},
-            {"recursion_limit": 14},
+            {"recursion_limit": 18},
         )
         for message in reversed(result["messages"]):
             if isinstance(message, ToolMessage) and isinstance(message.artifact, UserPreferences):

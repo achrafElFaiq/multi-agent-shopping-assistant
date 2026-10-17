@@ -19,6 +19,13 @@ State = Annotated[dict[str, Any], InjectedState]  # the agent's messages, given 
 
 # Past offers are hints for one request: nothing read from them is saved, whatever the model does.
 AFTER_HISTORY = "Preferences can't be changed after reading past offers: use them for this request only."
+BEFORE_HISTORY = "Read past offers first: call search_history, then submit again with them as hints."
+
+
+class Submission(UserPreferences):
+    """What the model submits, plus the agent's messages, given by the system."""
+
+    state: State
 
 
 def make_preference_tools(
@@ -71,10 +78,16 @@ def make_preference_tools(
         row = repository.remove_preferences(category, removal)
         return row.model_dump(mode="json") if row is not None else {"category": category, "preferences": None}
 
-    # return_direct: calling this tool ends the agent. The model gets the text, the code gets the artifact.
-    @tool(args_schema=UserPreferences, return_direct=True, response_format="content_and_artifact")
-    def submit_preferences(**preferences: Any) -> tuple[str, UserPreferences]:
-        """Submit preferences for this shopping request. This ends your work without saving them to the database."""
+    # An accepted submission ends the agent. The model gets the text, the code gets the artifact.
+    @tool(args_schema=Submission, return_direct=True, response_format="content_and_artifact")
+    def submit_preferences(state: State, **preferences: Any) -> tuple[str, UserPreferences | None]:
+        """Submit preferences for this shopping request. This ends your work without saving them to the database.
+
+        The first call asks you to read past offers with search_history, then to submit again.
+        """
+        if not history_read(state):
+            logger.info("asked to read past offers before submitting")
+            return BEFORE_HISTORY, None
         return "Preferences received.", UserPreferences(**preferences)
 
     tools = [get_preferences, search_history, ask_user, save_preferences, remove_preferences, submit_preferences]
