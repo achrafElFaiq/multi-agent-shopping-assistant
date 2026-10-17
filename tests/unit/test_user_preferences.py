@@ -44,8 +44,8 @@ def tool_reply(name: str, call_id: str, **args: Any) -> AIMessage:
 
 
 def test_reads_context_and_submits_without_saving(repository: PostgresPreferencesRepository) -> None:
-    repository.update_preferences("general", Preferences(likes=["black"], dislikes=["suede"]))
-    stored = repository.update_preferences(
+    repository.save_preferences("general", Preferences(likes=["black"], dislikes=["suede"]))
+    stored = repository.save_preferences(
         "shoes", Preferences(attributes={"size": "43 EU"}, likes=["Asics"], usual_budget=ANSWER.usual_budget)
     )
     history = InMemoryRecommendations()
@@ -103,7 +103,7 @@ def test_reads_context_and_submits_without_saving(repository: PostgresPreference
 
 
 def test_partial_update_preserves_unrelated_preferences(repository: PostgresPreferencesRepository) -> None:
-    before = repository.update_preferences(
+    before = repository.save_preferences(
         "shoes",
         Preferences(
             attributes={"size": "43 EU", "width": "wide"},
@@ -118,14 +118,14 @@ def test_partial_update_preserves_unrelated_preferences(repository: PostgresPref
     tools["update_preferences"].invoke(
         {
             "category": "shoes",
-            "changes": {"attributes": {"size": "44 EU"}, "likes": []},
+            "changes": {"attributes": {"size": "44 EU"}, "likes": ["Nike"]},
         }
     )
 
     saved = repository.get_preferences("shoes")
     assert saved is not None
     assert saved.preferences.attributes == {"size": "44 EU", "width": "wide"}
-    assert saved.preferences.likes == []
+    assert saved.preferences.likes == ["Asics", "Nike"]
     assert saved.preferences.dislikes == before.preferences.dislikes
     assert saved.preferences.requirements == before.preferences.requirements
     assert saved.preferences.usual_budget == before.preferences.usual_budget

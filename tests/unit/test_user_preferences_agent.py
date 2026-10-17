@@ -46,7 +46,7 @@ def test_reads_preferences_and_history_updates_and_submits() -> None:
     model = script(
         ("get_preferences", {"category": "shoes"}),
         ("search_history", {"query": "running shoes"}),
-        ("update_preferences", {"category": "shoes", "changes": {"dislikes": ["suede"]}}),
+        ("save_preferences", {"category": "shoes", "changes": {"dislikes": ["suede"]}}),
         ("submit_preferences", ANSWER),
     )
 

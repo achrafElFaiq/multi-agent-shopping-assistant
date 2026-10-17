@@ -30,6 +30,18 @@ class Preferences(BaseModel):
     usual_budget: Budget | None = None
 
 
+class PreferenceRemoval(BaseModel):
+    """What to remove from a category: attribute keys, list items, and the budget if asked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attributes: list[str] = Field(default_factory=list)  # keys, e.g. ["gender"]
+    likes: list[str] = Field(default_factory=list)
+    dislikes: list[str] = Field(default_factory=list)
+    requirements: list[str] = Field(default_factory=list)
+    usual_budget: bool = False
+
+
 class CategoryPreferences(BaseModel):
     """One row in the preferences table, including the general category."""
 
@@ -49,11 +61,17 @@ class PreferencesRepository(Protocol):
         """Return the category's row, or None if it does not exist."""
         ...
 
-    def update_preferences(self, category: str, changes: Preferences) -> CategoryPreferences:
+    def save_preferences(self, category: str, changes: Preferences) -> CategoryPreferences:
         """Create or update a category and set updated_at to the current UTC time.
 
-        Only fields in changes.model_dump(exclude_unset=True) are updated.
-        Merge attributes by key; replace supplied lists and the supplied budget.
-        Omitted fields keep their existing values.
+        List items are added to the stored ones, without duplicates (ignoring case).
+        Attributes are set by key, and the budget is set if given. Nothing is removed.
+        """
+        ...
+
+    def remove_preferences(self, category: str, removal: PreferenceRemoval) -> CategoryPreferences | None:
+        """Remove the named attribute keys and list items (ignoring case), and the budget if asked.
+
+        Return None if the category does not exist.
         """
         ...

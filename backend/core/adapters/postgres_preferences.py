@@ -1,12 +1,14 @@
 """Single-user preferences stored in PostgreSQL through psycopg."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 import psycopg
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 
-from backend.core.ports.preferences import CategoryPreferences, Preferences
+from backend.core.ports.preferences import CategoryPreferences, PreferenceRemoval, Preferences
+from backend.core.services.preferences import removed, saved
 
 
 class PostgresPreferencesRepository:
@@ -32,29 +34,34 @@ class PostgresPreferencesRepository:
                 "SELECT category, preferences, updated_at FROM preferences WHERE category = %s", (category,)
             ).fetchone()
 
-    def update_preferences(self, category: str, changes: Preferences) -> CategoryPreferences:
-        candidate = CategoryPreferences(category=category, preferences=changes, updated_at=datetime.now(UTC))
-        patch = changes.model_dump(mode="json", exclude_unset=True)
-        with psycopg.connect(self._database_url, row_factory=class_row(CategoryPreferences)) as connection:
-            updated = connection.execute(
-                """
-                INSERT INTO preferences AS stored (category, preferences, updated_at)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (category) DO UPDATE SET
-                    preferences = (stored.preferences || %s) || jsonb_build_object(
-                        'attributes', (stored.preferences -> 'attributes') || %s
-                    ),
-                    updated_at = EXCLUDED.updated_at
-                RETURNING category, preferences, updated_at
-                """,
-                (
-                    candidate.category,
-                    Jsonb(candidate.preferences.model_dump(mode="json")),
-                    candidate.updated_at,
-                    Jsonb(patch),
-                    Jsonb(patch.get("attributes", {})),
-                ),
-            ).fetchone()
-            if updated is None:
-                raise RuntimeError("PostgreSQL did not return the updated preferences.")
-            return updated
+    def save_preferences(self, category: str, changes: Preferences) -> CategoryPreferences:
+        with psycopg.connect(self._database_url) as connection:
+            stored = locked(connection, category)
+            return write(connection, category, saved(stored or Preferences(), changes))
+
+    def remove_preferences(self, category: str, removal: PreferenceRemoval) -> CategoryPreferences | None:
+        with psycopg.connect(self._database_url) as connection:
+            stored = locked(connection, category)
+            return write(connection, category, removed(stored, removal)) if stored else None
+
+
+def locked(connection: psycopg.Connection[tuple[Any, ...]], category: str) -> Preferences | None:
+    """Read a category and lock its row until the end of the transaction, so changes apply to what is stored."""
+    row = connection.execute(
+        "SELECT preferences FROM preferences WHERE category = %s FOR UPDATE", (category,)
+    ).fetchone()
+    return Preferences.model_validate(row[0]) if row else None
+
+
+def write(
+    connection: psycopg.Connection[tuple[Any, ...]], category: str, preferences: Preferences
+) -> CategoryPreferences:
+    row = CategoryPreferences(category=category, preferences=preferences, updated_at=datetime.now(UTC))
+    connection.execute(
+        """
+        INSERT INTO preferences (category, preferences, updated_at) VALUES (%s, %s, %s)
+        ON CONFLICT (category) DO UPDATE SET preferences = EXCLUDED.preferences, updated_at = EXCLUDED.updated_at
+        """,
+        (row.category, Jsonb(row.preferences.model_dump(mode="json")), row.updated_at),
+    )
+    return row

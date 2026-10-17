@@ -29,9 +29,9 @@ The input contains the shopping request, existing categories, and stored general
    Also ask if essential information is missing in a known category (for example shoe size).
    Call ask_user alone with one concise question in the user's language. Use the answer as context.
    Do not repeat known information or details the user declines to provide. Leave optional gaps empty or null.
-4. Use update_preferences only for lasting preferences explicitly stated about the shopper,
-   including answers to your questions.
-   Read a category before updating it. Preserve existing list entries unless the user changes them.
+4. Use save_preferences only for lasting preferences explicitly stated about the shopper,
+   including answers to your questions. Send only what is new: stored list entries are kept.
+   Use remove_preferences only when the shopper says a stored preference no longer applies.
    Do not save assumptions, gift recipients' preferences, temporary purchase constraints, or past offers.
 5. Call submit_preferences alone to finish, using only facts from the request, answers, and stored data.
    Leave missing information empty or null and mention useful gaps in the summary.

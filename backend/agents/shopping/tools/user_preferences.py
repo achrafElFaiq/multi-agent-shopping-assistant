@@ -40,10 +40,9 @@ def make_preference_tools(
     def update_preferences(category: str, changes: Preferences) -> dict[str, Any]:
         """Save lasting preferences explicitly stated by the user. Send only changed fields.
 
-        Attribute keys merge; supplied lists and the budget replace their previous values.
-        Read the category first and preserve list entries that still apply.
+        List items are added to the stored ones; attributes and the budget are set. Nothing is removed.
         """
-        return repository.update_preferences(category, changes).model_dump(mode="json")
+        return repository.save_preferences(category, changes).model_dump(mode="json")
 
     # return_direct: calling this tool ends the agent. The model gets the text, the code gets the artifact.
     @tool(args_schema=UserPreferences, return_direct=True, response_format="content_and_artifact")
