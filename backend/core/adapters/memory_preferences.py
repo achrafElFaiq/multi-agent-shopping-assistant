@@ -3,10 +3,13 @@
 Starts with the example preferences of backend/seed.py. The PostgreSQL adapter replaces it for real use.
 """
 
+import logging
 from datetime import UTC, datetime
 
 from backend.core.ports.preferences import CategoryPreferences, PreferenceRemoval, Preferences
 from backend.core.services.preferences import removed, saved
+
+logger = logging.getLogger(__name__)
 
 
 class InMemoryPreferencesRepository:
@@ -24,10 +27,12 @@ class InMemoryPreferencesRepository:
         return self._rows.get(category)
 
     def save_preferences(self, category: str, changes: Preferences) -> CategoryPreferences:
+        logger.info("[mock] saved %s: %s", category, changes.model_dump_json(exclude_defaults=True))
         current = self._rows.get(category)
         return self._store(category, saved(current.preferences if current else Preferences(), changes))
 
     def remove_preferences(self, category: str, removal: PreferenceRemoval) -> CategoryPreferences | None:
+        logger.info("[mock] removed from %s: %s", category, removal.model_dump_json(exclude_defaults=True))
         current = self._rows.get(category)
         return self._store(category, removed(current.preferences, removal)) if current else None
 

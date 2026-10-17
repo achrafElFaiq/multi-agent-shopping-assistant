@@ -1,5 +1,6 @@
 """Tools for reading, asking about, and updating a single user's category preferences, and for reading past offers."""
 
+import logging
 from typing import Annotated, Any
 
 from langchain_core.messages import ToolMessage
@@ -11,6 +12,8 @@ from backend.core.models.preferences import UserPreferences
 from backend.core.models.recommendations import RecommendationRecord
 from backend.core.ports.preferences import PreferenceRemoval, Preferences, PreferencesRepository
 from backend.core.ports.recommendations import RecommendationRepository
+
+logger = logging.getLogger(__name__)
 
 State = Annotated[dict[str, Any], InjectedState]  # the agent's messages, given by the system, not the model
 
@@ -50,6 +53,7 @@ def make_preference_tools(
         List items are added to the stored ones; attributes and the budget are set. Nothing is removed.
         """
         if history_read(state):
+            logger.info("refused a save after reading past offers: %s", changes.model_dump_json(exclude_defaults=True))
             return AFTER_HISTORY
         return repository.save_preferences(category, changes).model_dump(mode="json")
 
@@ -60,6 +64,9 @@ def make_preference_tools(
         Only what is named is removed.
         """
         if history_read(state):
+            logger.info(
+                "refused a removal after reading past offers: %s", removal.model_dump_json(exclude_defaults=True)
+            )
             return AFTER_HISTORY
         row = repository.remove_preferences(category, removal)
         return row.model_dump(mode="json") if row is not None else {"category": category, "preferences": None}
