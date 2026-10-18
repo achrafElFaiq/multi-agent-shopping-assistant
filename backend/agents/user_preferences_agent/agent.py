@@ -27,13 +27,14 @@ The input contains the shopping request, existing categories, and stored general
    Call ask_user alone with one concise question in the user's language. Use the answer as context.
    Do not repeat known information or details the user declines to provide. Leave optional gaps empty or null.
 4. Use save_preferences only for lasting preferences explicitly stated about the shopper,
-   including answers to your questions. Send only what is new: stored list entries are kept.
+   in the request or in answers to your questions. Send only what is new: stored list entries are kept.
    Use remove_preferences only when the shopper says a stored preference no longer applies.
    Do not save assumptions, gift recipients' preferences, or temporary purchase constraints.
 5. Call submit_preferences alone when done, using only facts from the request, answers, and stored data.
    Leave missing information empty or null and mention useful gaps in the summary.
-6. The first submission asks you to read past offers: call search_history with what the shopper is looking for,
-   and search again with other words if useful. Preferences can no longer be changed after this.
+6. The first submission asks you to read past offers. Save or remove first what the shopper stated, if not done yet,
+   then call search_history with what the shopper is looking for, and search again with other words if useful.
+   Preferences can no longer be changed after this.
    Use past offers as hints for this request only: reflect clear patterns (a refused brand, a size that fit)
    in likes, dislikes, requirements and the summary, then submit again.
 
@@ -65,10 +66,14 @@ def make_user_preferences_agent(
             json.loads(str(message.content))["preferences"] is None for message in reads
         ):
             tool_choice = "ask_user"
-        elif submitted and not searched:
-            tool_choice = "search_history"
         # Past offers come only once the model says it is done, so its saves are made before: they are refused after.
-        offered = tools if searched or submitted else [tool for tool in tools if tool.name != "search_history"]
+        # After that first, refused submission it may still save, then must read them to submit again.
+        if searched:
+            offered = tools
+        elif submitted:
+            offered = [tool for tool in tools if tool.name != "submit_preferences"]
+        else:
+            offered = [tool for tool in tools if tool.name != "search_history"]
         return {"messages": [model.bind_tools(offered, tool_choice=tool_choice).invoke(state["messages"])]}
 
     def route_after_tools(state: MessagesState) -> str:

@@ -19,7 +19,10 @@ State = Annotated[dict[str, Any], InjectedState]  # the agent's messages, given 
 
 # Past offers are hints for one request: nothing read from them is saved, whatever the model does.
 AFTER_HISTORY = "Preferences can't be changed after reading past offers: use them for this request only."
-BEFORE_HISTORY = "Read past offers first: call search_history, then submit again with them as hints."
+BEFORE_HISTORY = (
+    "Read past offers first. Before that, save or remove what the shopper stated in the request or in answers, "
+    "if not done yet: it can't be changed after. Then call search_history, and submit again with them as hints."
+)
 
 
 class Submission(UserPreferences):
