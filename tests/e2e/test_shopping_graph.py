@@ -39,7 +39,7 @@ def scripted(*calls: tuple[str, dict[str, Any]]) -> FakeChatModel:
 
 
 def build_graph(repository: PostgresPreferencesRepository, *calls: tuple[str, dict[str, Any]]) -> ShoppingGraph:
-    repository.update_preferences("shoes", Preferences(likes=["Asics"]))
+    repository.save_preferences("shoes", Preferences(likes=["Asics"]))
     searcher = FakeSearcher([make_offer("Pro:Direct", "99.90")])
     return build_real_graph(
         scripted(*PREFERENCES, *RECOMMEND_FIRST, *calls), repository, searcher, InMemoryRecommendations()
@@ -155,7 +155,7 @@ def test_new_category_asks_saves_answer_and_continues_to_recommendation(
 
 def test_the_search_agent_gets_the_shoppers_limits_from_code(repository: PostgresPreferencesRepository) -> None:
     searcher = FakeSearcher([make_offer("Pro:Direct", "99.90")])
-    repository.update_preferences("shoes", Preferences(likes=["Asics"]))
+    repository.save_preferences("shoes", Preferences(likes=["Asics"]))
     graph = build_real_graph(scripted(*PREFERENCES, *RECOMMEND_FIRST), repository, searcher, InMemoryRecommendations())
     config: RunnableConfig = {"configurable": {"thread_id": "limits"}}
 

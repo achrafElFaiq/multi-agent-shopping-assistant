@@ -1,7 +1,7 @@
 """The mock preferences repository follows the same rules as the PostgreSQL one."""
 
 from backend.core.adapters.memory_preferences import InMemoryPreferencesRepository
-from backend.core.ports.preferences import Preferences
+from backend.core.ports.preferences import PreferenceRemoval, Preferences
 
 
 def test_reads_the_preferences_it_starts_with() -> None:
@@ -13,23 +13,29 @@ def test_reads_the_preferences_it_starts_with() -> None:
     assert repository.get_preferences("coffee") is None
 
 
-def test_partial_update_merges_attributes_and_replaces_supplied_lists() -> None:
+def test_saves_and_removes_without_touching_the_rest() -> None:
     repository = InMemoryPreferencesRepository(
-        {"shoes": Preferences(attributes={"size": "43 EU", "width": "wide"}, likes=["Asics"], dislikes=["suede"])}
+        {"shoes": Preferences(attributes={"size": "43 EU", "width": "wide"}, likes=["Asics"], dislikes=["narrow fit"])}
     )
 
-    saved = repository.update_preferences("shoes", Preferences(attributes={"size": "44 EU"}, likes=[]))
+    saved = repository.save_preferences("shoes", Preferences(attributes={"size": "44 EU"}, dislikes=["suede"]))
 
     assert saved.preferences.attributes == {"size": "44 EU", "width": "wide"}
-    assert saved.preferences.likes == []
-    assert saved.preferences.dislikes == ["suede"]
+    assert saved.preferences.likes == ["Asics"]
+    assert saved.preferences.dislikes == ["narrow fit", "suede"]
     assert repository.get_preferences("shoes") == saved
+
+    after = repository.remove_preferences("shoes", PreferenceRemoval(attributes=["width"], dislikes=["Narrow Fit"]))
+
+    assert after is not None and after.preferences.attributes == {"size": "44 EU"}
+    assert after.preferences.dislikes == ["suede"]
+    assert repository.remove_preferences("coffee", PreferenceRemoval(likes=["light roast"])) is None
 
 
 def test_creates_a_new_category() -> None:
     repository = InMemoryPreferencesRepository()
 
-    repository.update_preferences("coffee", Preferences(likes=["light roast"]))
+    repository.save_preferences("coffee", Preferences(likes=["light roast"]))
 
     coffee = repository.get_preferences("coffee")
     assert coffee is not None and coffee.preferences.likes == ["light roast"]

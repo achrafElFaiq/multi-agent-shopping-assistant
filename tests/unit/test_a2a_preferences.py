@@ -47,8 +47,9 @@ def test_agent_card() -> None:
 def test_a_question_and_its_answer_travel_over_a2a() -> None:
     model = script(
         ("get_preferences", {"category": "shoes"}),
-        ("search_history", {"query": "running shoes"}),
         ("ask_user", {"question": "What size?"}),
+        ("done", {"category": "shoes"}),
+        ("search_history", {"query": "running shoes"}),
         ("submit_preferences", ANSWER),
     )
     agent = A2APreferencesAgent(URL, http_client=preferences_server(model))

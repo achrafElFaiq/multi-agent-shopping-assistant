@@ -108,8 +108,9 @@ def test_no_payment_without_a_yes() -> None:
 def test_a_question_from_the_preferences_agent_over_a2a_pauses_the_master() -> None:
     preferences_model = script(
         ("get_preferences", {"category": "shoes"}),
-        ("search_history", {"query": "running shoes"}),
         ("ask_user", {"question": "What size?"}),
+        ("done", {"category": "shoes"}),
+        ("search_history", {"query": "running shoes"}),
         ("submit_preferences", {"category": "shoes", "summary": "Size 43", "attributes": {"size": "43"}}),
     )
     app = create_app(preferences_model, InMemoryPreferencesRepository(), InMemoryRecommendations(), PREFERENCES_URL)
